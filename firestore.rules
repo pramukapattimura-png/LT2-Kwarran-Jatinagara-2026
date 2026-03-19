@@ -1,0 +1,123 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: regu
+    // Fields: nama (string), pangkalan (string), kategori (string)
+    //
+    // Collection: lomba
+    // Fields: nama (string), hari (number)
+    //
+    // Collection: nilai
+    // Fields: reguId (string), lombaId (string), score (number)
+    //
+    // Collection: komentar
+    // Fields: author (string), content (string), timestamp (timestamp)
+    //
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "pramukapattimura@gmail.com" || 
+         (exists(/databases/$(database)/documents/settings/global) && 
+          "adminEmails" in get(/databases/$(database)/documents/settings/global).data &&
+          get(/databases/$(database)/documents/settings/global).data.adminEmails.hasAny([request.auth.token.email])));
+    }
+
+    function isValidRegu(data) {
+      return data.nama is string && data.nama.size() > 0 && data.nama.size() < 100 &&
+             data.pangkalan is string && data.pangkalan.size() > 0 &&
+             data.kategori in ["SD Putra", "SD Putri", "SMP Putra", "SMP Putri"] &&
+             (!('nomorTenda' in data) || data.nomorTenda is string) &&
+             (!('pinru' in data) || data.pinru is string) &&
+             (!('wapinru' in data) || data.wapinru is string) &&
+             (!('anggota' in data) || data.anggota is list);
+    }
+
+    function isValidLomba(data) {
+      return data.nama is string && data.nama.size() > 0 &&
+             data.hari is number && data.hari >= 1 && data.hari <= 3 &&
+             data.kategori in ["SD Putra", "SD Putri", "SMP Putra", "SMP Putri"] &&
+             (!('bidangLomba' in data) || data.bidangLomba is string);
+    }
+
+    function isValidNilai(data) {
+      return data.reguId is string && data.lombaId is string &&
+             data.score is number && data.score >= 0 &&
+             (!('p1' in data) || data.p1 is number) &&
+             (!('p2' in data) || data.p2 is number) &&
+             (!('p3' in data) || data.p3 is number) &&
+             (!('p4' in data) || data.p4 is number);
+    }
+
+    function isValidKomentar(data) {
+      return data.author is string && data.author.size() > 0 && data.author.size() < 100 &&
+             data.authorId is string && data.authorId == request.auth.uid &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 1000 &&
+             data.timestamp is timestamp &&
+             (!('postId' in data) || data.postId is string) &&
+             (!('authorPhoto' in data) || data.authorPhoto is string);
+    }
+
+    function isValidBerita(data) {
+      return data.content is string && data.content.size() > 0 && data.content.size() < 5000 &&
+             data.authorId is string && data.authorId == request.auth.uid &&
+             (!('title' in data) || (data.title is string && data.title.size() < 200)) &&
+             (!('mediaUrl' in data) || data.mediaUrl is string) &&
+             (!('mediaType' in data) || data.mediaType in ["image", "video"]) &&
+             (!('authorName' in data) || data.authorName is string) &&
+             (!('authorPhoto' in data) || data.authorPhoto is string) &&
+             (!('likes' in data) || data.likes is list) &&
+             data.timestamp is timestamp;
+    }
+
+    match /regu/{reguId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidRegu(request.resource.data);
+    }
+
+    match /lomba/{lombaId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidLomba(request.resource.data);
+    }
+
+    match /nilai/{nilaiId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidNilai(request.resource.data);
+    }
+
+    match /komentar/{komId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidKomentar(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /berita/{beritaId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidBerita(request.resource.data);
+      allow update: if (isAdmin() && isValidBerita(request.resource.data)) || 
+                     (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']));
+      allow delete: if isAdmin() || 
+                     (isAuthenticated() && (
+                       (resource.data.keys().contains('authorId') && resource.data.authorId == request.auth.uid) ||
+                       (resource.data.keys().contains('authorEmail') && resource.data.authorEmail == request.auth.token.email)
+                     ));
+    }
+    
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}
