@@ -227,17 +227,12 @@ export default function Home() {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10 sm:space-y-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-6 space-y-4 sm:space-y-8">
         {/* Hero Section */}
-        <div className="space-y-6 sm:space-y-10">
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Removed components as per request */}
-            </div>
-
-            {/* Main Tab Navigation */}
-            <div className="flex justify-center">
-              <div className="flex w-full bg-brown-900/50 backdrop-blur-md p-1.5 rounded-[2rem] border border-brown-800 shadow-2xl">
+        <div className="space-y-3 sm:space-y-4">
+          {/* Main Tab Navigation */}
+          <div className="flex justify-center">
+            <div className="flex w-full bg-brown-900/50 backdrop-blur-md p-1 rounded-[2rem] border border-brown-800 shadow-2xl max-w-2xl">
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setActiveMainTab('berita')}
@@ -295,197 +290,96 @@ export default function Home() {
           </div>
           
           <div className="border-t border-brown-100"></div>
-        </div>
-
-        {activeMainTab === 'berita' ? (
+        
+        {activeMainTab === 'berita' ?
           /* News Section */
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <div className="flex items-end justify-between">
-              <div className="space-y-1">
-                <h2 className="text-[clamp(8px,3.5vw,24px)] sm:text-xl md:text-2xl font-black text-brown-900 tracking-tighter uppercase whitespace-nowrap">
-                  Berita & <span className="text-brown-500">Dokumentasi</span>
-                </h2>
-                <p className="text-xs text-brown-400 font-bold uppercase tracking-[0.2em]">Kabar terbaru dari lapangan</p>
+          <div className="space-y-6">
+            {/* Create Post Section - Prominent and accessible */}
+            <div className="sticky top-[72px] sm:top-[88px] z-30 -mx-2 px-2 pb-2 bg-brown-50/30 backdrop-blur-sm">
+              <div className="bg-brown-900/60 backdrop-blur-xl rounded-2xl border border-brown-800 p-3 sm:p-4 shadow-2xl space-y-4 ring-1 ring-brown-700/50">
+                <div className="flex gap-3">
+                  <div className="h-10 w-10 rounded-full overflow-hidden bg-brown-800 border border-brown-700 flex-shrink-0">
+                    {user?.photoURL ? (
+                      <img src={user.photoURL} alt={user.displayName || ''} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center text-brown-400">
+                        <User className="h-5 w-5" />
+                      </div>
+                    )}
+                  </div>
+                  {user ? (
+                    <motion.button
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setIsCreatingPost(true)}
+                      className="flex-grow bg-brown-800/50 hover:bg-brown-800 rounded-full px-4 py-2 text-left text-brown-300 font-medium transition-colors text-sm border border-brown-700/30"
+                    >
+                      Apa yang Anda pikirkan, {user.displayName?.split(' ')[0]}?
+                    </motion.button>
+                  ) : (
+                    <motion.button
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleLogin}
+                      className="flex-grow flex items-center gap-3 bg-brown-600 hover:bg-brown-500 text-white rounded-full px-4 py-2 text-left transition-colors text-sm font-black uppercase tracking-widest shadow-lg shadow-brown-950/20"
+                    >
+                      <LogIn className="h-4 w-4" />
+                      <span>Login untuk Berbagi</span>
+                    </motion.button>
+                  )}
+                </div>
+                
+                <div className="flex items-center gap-1 pt-2 border-t border-brown-800/50">
+                  <motion.label 
+                    whileTap={{ scale: 0.95 }}
+                    className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-brown-800/50 rounded-lg transition-colors text-brown-300 text-xs sm:text-sm font-bold cursor-pointer"
+                  >
+                    <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500" />
+                    <span>Foto</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        if (user) {
+                          handleFileChange(e);
+                          setIsCreatingPost(true);
+                        } else {
+                          handleLogin();
+                        }
+                      }} 
+                    />
+                  </motion.label>
+                  <motion.label 
+                    whileTap={{ scale: 0.95 }}
+                    className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-brown-800/50 rounded-lg transition-colors text-brown-300 text-xs sm:text-sm font-bold cursor-pointer"
+                  >
+                    <Play className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />
+                    <span>Video</span>
+                    <input 
+                      type="file" 
+                      accept="video/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        if (user) {
+                          handleFileChange(e);
+                          setIsCreatingPost(true);
+                        } else {
+                          handleLogin();
+                        }
+                      }} 
+                    />
+                  </motion.label>
+                </div>
               </div>
             </div>
 
-            {/* Create Post Section */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="bg-brown-900/40 backdrop-blur-md rounded-2xl border border-brown-800 p-4 shadow-2xl space-y-4"
-            >
-              <div className="flex gap-3">
-                <div className="h-10 w-10 rounded-full overflow-hidden bg-brown-800 border border-brown-700 flex-shrink-0">
-                  {user?.photoURL ? (
-                    <img src={user.photoURL} alt={user.displayName || ''} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="h-full w-full flex items-center justify-center text-brown-400">
-                      <User className="h-5 w-5" />
-                    </div>
-                  )}
-                </div>
-                {user ? (
-                  <motion.button
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => setIsCreatingPost(true)}
-                    className="flex-grow bg-brown-800/50 hover:bg-brown-800 rounded-full px-4 py-2 text-left text-brown-300 font-medium transition-colors text-sm"
-                  >
-                    Apa yang Anda pikirkan, {user.displayName?.split(' ')[0]}?
-                  </motion.button>
-                ) : (
-                  <motion.button
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleLogin}
-                    className="flex-grow flex items-center gap-3 bg-brown-600 hover:bg-brown-500 text-white rounded-full px-4 py-2 text-left transition-colors text-sm font-black uppercase tracking-widest shadow-lg shadow-brown-950/20"
-                  >
-                    <LogIn className="h-4 w-4" />
-                    <span>Login Google untuk Berbagi</span>
-                  </motion.button>
-                )}
+            <div className="flex items-end justify-between px-2">
+              <div className="space-y-1">
+                <h2 className="text-lg sm:text-xl md:text-2xl font-black text-brown-900 tracking-tighter uppercase">
+                  Berita & <span className="text-brown-500">Dokumentasi</span>
+                </h2>
+                <p className="text-[10px] sm:text-xs text-brown-400 font-bold uppercase tracking-[0.2em]">Kabar terbaru dari lapangan</p>
               </div>
-              
-              <div className="flex items-center gap-1 pt-2 border-t border-brown-800">
-                <motion.label 
-                  whileTap={{ scale: 0.95 }}
-                  className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-brown-800/50 rounded-lg transition-colors text-brown-300 text-sm font-bold cursor-pointer"
-                >
-                  <ImageIcon className="h-5 w-5 text-emerald-500" />
-                  <span>Foto</span>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    onChange={(e) => {
-                      if (user) {
-                        handleFileChange(e);
-                        setIsCreatingPost(true);
-                      } else {
-                        handleLogin();
-                      }
-                    }} 
-                  />
-                </motion.label>
-                <motion.label 
-                  whileTap={{ scale: 0.95 }}
-                  className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-brown-800/50 rounded-lg transition-colors text-brown-300 text-sm font-bold cursor-pointer"
-                >
-                  <Play className="h-5 w-5 text-red-500" />
-                  <span>Video</span>
-                  <input 
-                    type="file" 
-                    accept="video/*" 
-                    className="hidden" 
-                    onChange={(e) => {
-                      if (user) {
-                        handleFileChange(e);
-                        setIsCreatingPost(true);
-                      } else {
-                        handleLogin();
-                      }
-                    }} 
-                  />
-                </motion.label>
-              </div>
-
-              {isCreatingPost && user && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brown-950/80 backdrop-blur-md animate-in fade-in duration-300">
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="bg-brown-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-brown-800"
-                  >
-                    <div className="px-6 py-4 border-b border-brown-800 flex items-center justify-between">
-                      <h3 className="text-lg font-black text-brown-50 uppercase tracking-tight">Buat Postingan</h3>
-                      <motion.button 
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => {
-                          setIsCreatingPost(false);
-                          setSelectedFile(null);
-                          setFilePreview(null);
-                          setNewPostMediaUrl('');
-                        }} className="p-2 hover:bg-brown-800 rounded-full transition-colors">
-                        <ChevronDown className="h-6 w-6 text-brown-400" />
-                      </motion.button>
-                    </div>
-                    
-                    <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full overflow-hidden bg-brown-800 border border-brown-700">
-                          {user.photoURL && <img src={user.photoURL} alt="" className="h-full w-full object-cover" />}
-                        </div>
-                        <div>
-                          <div className="font-black text-brown-50 text-sm">{user.displayName}</div>
-                          <div className="text-[10px] font-bold text-brown-400 uppercase tracking-widest bg-brown-800 px-2 py-0.5 rounded-full inline-block">Publik</div>
-                        </div>
-                      </div>
-
-                      <textarea
-                        value={newPostContent}
-                        onChange={(e) => setNewPostContent(e.target.value)}
-                        placeholder={`Apa yang Anda pikirkan, ${user.displayName?.split(' ')[0]}?`}
-                        rows={4}
-                        className="w-full text-lg outline-none resize-none font-medium bg-transparent text-brown-50 placeholder:text-brown-600"
-                        autoFocus
-                      />
-
-                      {filePreview && (
-                        <div className="relative rounded-xl overflow-hidden border border-brown-800 bg-brown-950">
-                          <motion.button 
-                            whileTap={{ scale: 0.9 }}
-                            onClick={() => {
-                              setSelectedFile(null);
-                              setFilePreview(null);
-                              setNewPostMediaUrl('');
-                            }}
-                            className="absolute top-2 right-2 p-1.5 bg-brown-950/50 hover:bg-brown-950 text-white rounded-full transition-all z-10"
-                          >
-                            <ChevronDown className="h-4 w-4 rotate-180" />
-                          </motion.button>
-                          {newPostMediaType === 'video' ? (
-                            <video src={filePreview} className="w-full max-h-64 object-contain" controls />
-                          ) : (
-                            <img src={filePreview} alt="Preview" className="w-full max-h-64 object-contain" />
-                          )}
-                        </div>
-                      )}
-
-                      <div className="space-y-3 p-4 border border-brown-800 rounded-xl bg-brown-950/30">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-brown-400 uppercase tracking-widest">Tambahkan ke Postingan</span>
-                          <div className="flex gap-2">
-                            <motion.label 
-                              whileTap={{ scale: 0.9 }}
-                              className="p-2 rounded-lg transition-colors hover:bg-brown-800 text-emerald-500 cursor-pointer"
-                            >
-                              <ImageIcon className="h-5 w-5" />
-                              <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-                            </motion.label>
-                            <motion.label 
-                              whileTap={{ scale: 0.9 }}
-                              className="p-2 rounded-lg transition-colors hover:bg-brown-800 text-red-500 cursor-pointer"
-                            >
-                              <Play className="h-5 w-5" />
-                              <input type="file" accept="video/*" className="hidden" onChange={handleFileChange} />
-                            </motion.label>
-                          </div>
-                        </div>
-                      </div>
-
-                      <motion.button
-                        whileTap={{ scale: 0.98 }}
-                        onClick={handleCreatePost}
-                        disabled={isSubmittingPost || !newPostContent.trim()}
-                        className="w-full py-3 rounded-xl bg-brown-600 text-white font-black uppercase tracking-widest hover:bg-brown-500 transition-all disabled:opacity-50 shadow-lg shadow-brown-950/20"
-                      >
-                        {isSubmittingPost ? 'Memposting...' : 'Posting'}
-                      </motion.button>
-                    </div>
-                  </motion.div>
-                </div>
-              )}
-            </motion.div>
+            </div>
 
             {berita.length > 0 ? (
               <div className="grid grid-cols-1 gap-6">
@@ -667,7 +561,7 @@ export default function Home() {
               </div>
             )}
           </div>
-        ) : activeMainTab === 'rekap' ? (
+        : activeMainTab === 'rekap' ?
           /* Filters & Leaderboard Section */
           <div id="leaderboard" className="scroll-mt-32 space-y-16 animate-in fade-in slide-in-from-bottom-8 duration-700">
             <div className="sticky top-20 z-30 bg-brown-900/80 backdrop-blur-xl p-4 sm:p-6 rounded-[2.5rem] shadow-2xl shadow-brown-950/40 border border-brown-800 flex flex-col lg:flex-row gap-6 items-center justify-between">
@@ -876,7 +770,7 @@ export default function Home() {
               </div>
             </div>
           </div>
-        ) : activeMainTab === 'drive' ? (
+        : activeMainTab === 'drive' ?
           /* Google Drive Section */
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
             <div className="space-y-1">
@@ -906,7 +800,7 @@ export default function Home() {
               </motion.a>
             </div>
           </div>
-        ) : (
+        :
           /* About Section */
           <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
             <div className="space-y-1">
@@ -958,18 +852,116 @@ Ketua Kwarran Jatinagara`}
               </div>
             </div>
           </div>
-        )}
+        }
       </div>
 
+      {/* Create Post Modal */}
+      {isCreatingPost && user &&
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brown-950/80 backdrop-blur-md animate-in fade-in duration-300">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-brown-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-brown-800"
+          >
+            <div className="px-6 py-4 border-b border-brown-800 flex items-center justify-between">
+              <h3 className="text-lg font-black text-brown-50 uppercase tracking-tight">Buat Postingan</h3>
+              <motion.button 
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  setIsCreatingPost(false);
+                  setSelectedFile(null);
+                  setFilePreview(null);
+                  setNewPostMediaUrl('');
+                }} className="p-2 hover:bg-brown-800 rounded-full transition-colors">
+                <ChevronDown className="h-6 w-6 text-brown-400" />
+              </motion.button>
+            </div>
+            
+            <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full overflow-hidden bg-brown-800 border border-brown-700">
+                  {user.photoURL && <img src={user.photoURL} alt="" className="h-full w-full object-cover" />}
+                </div>
+                <div>
+                  <div className="font-black text-brown-50 text-sm">{user.displayName}</div>
+                  <div className="text-[10px] font-bold text-brown-400 uppercase tracking-widest bg-brown-800 px-2 py-0.5 rounded-full inline-block">Publik</div>
+                </div>
+              </div>
+
+              <textarea
+                value={newPostContent}
+                onChange={(e) => setNewPostContent(e.target.value)}
+                placeholder={`Apa yang Anda pikirkan, ${user.displayName?.split(' ')[0]}?`}
+                rows={4}
+                className="w-full text-lg outline-none resize-none font-medium bg-transparent text-brown-50 placeholder:text-brown-600"
+                autoFocus
+              />
+
+              {filePreview && (
+                <div className="relative rounded-xl overflow-hidden border border-brown-800 bg-brown-950">
+                  <motion.button 
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setFilePreview(null);
+                      setNewPostMediaUrl('');
+                    }}
+                    className="absolute top-2 right-2 p-1.5 bg-brown-950/50 hover:bg-brown-950 text-white rounded-full transition-all z-10"
+                  >
+                    <ChevronDown className="h-4 w-4 rotate-180" />
+                  </motion.button>
+                  {newPostMediaType === 'video' ? (
+                    <video src={filePreview} className="w-full max-h-64 object-contain" controls />
+                  ) : (
+                    <img src={filePreview} alt="Preview" className="w-full max-h-64 object-contain" />
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-3 p-4 border border-brown-800 rounded-xl bg-brown-950/30">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-brown-400 uppercase tracking-widest">Tambahkan ke Postingan</span>
+                  <div className="flex gap-2">
+                    <motion.label 
+                      whileTap={{ scale: 0.9 }}
+                      className="p-2 rounded-lg transition-colors hover:bg-brown-800 text-emerald-500 cursor-pointer"
+                    >
+                      <ImageIcon className="h-5 w-5" />
+                      <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                    </motion.label>
+                    <motion.label 
+                      whileTap={{ scale: 0.9 }}
+                      className="p-2 rounded-lg transition-colors hover:bg-brown-800 text-red-500 cursor-pointer"
+                    >
+                      <Play className="h-5 w-5" />
+                      <input type="file" accept="video/*" className="hidden" onChange={handleFileChange} />
+                    </motion.label>
+                  </div>
+                </div>
+              </div>
+
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={handleCreatePost}
+                disabled={isSubmittingPost || !newPostContent.trim()}
+                className="w-full py-3 rounded-xl bg-brown-600 text-white font-black uppercase tracking-widest hover:bg-brown-500 transition-all disabled:opacity-50 shadow-lg shadow-brown-950/20"
+              >
+                {isSubmittingPost ? 'Memposting...' : 'Posting'}
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>
+      }
+
       {/* Toast Notification */}
-      {toast && (
+      {toast &&
         <div className={cn(
           "fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-2xl shadow-2xl font-black uppercase tracking-widest text-xs animate-in slide-in-from-bottom-4 duration-300",
           toast.type === 'success' ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
         )}>
           {toast.message}
         </div>
-      )}
+      }
       {/* Confirm Delete Modal */}
       <ConfirmModal
         isOpen={!!confirmDeleteId}
