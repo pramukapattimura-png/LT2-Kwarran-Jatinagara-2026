@@ -17,6 +17,7 @@ export default function AdminDashboard() {
   const [berita, setBerita] = useState<Berita[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [activeTab, setActiveTab] = useState<'nilai' | 'berita' | 'settings'>('nilai');
+  const [subTab, setSubTab] = useState<'rekap' | 'regu' | 'lomba'>('rekap');
   const [spreadsheetData, setSpreadsheetData] = useState<any[][]>([
     [{ value: "NO" }, { value: "NAMA REGU" }, { value: "LOMBA 1" }, { value: "LOMBA 2" }, { value: "TOTAL" }],
     [{ value: 1 }, { value: "Regu Elang" }, { value: 0 }, { value: 0 }, { value: "=C2+D2" }],
@@ -220,9 +221,19 @@ Ketua Kwarran Jatinagara`
     reader.readAsBinaryString(file);
   };
 
-  const downloadTemplate = (type: 'regu' | 'lomba' | 'nilai') => {
+  const downloadTemplate = (type: 'regu' | 'lomba' | 'nilai' | 'rekap') => {
     let data: any[] = [];
     let filename = '';
+
+    if (type === 'rekap') {
+      const aoa = spreadsheetData.map(row => row.map(cell => cell?.value || ""));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Rekap");
+      filename = `Template_Rekap_Nilai_${selectedKategori.replace(' ', '_')}.xlsx`;
+      XLSX.writeFile(wb, filename);
+      return;
+    }
 
     if (type === 'regu') {
       data = [{
@@ -298,7 +309,15 @@ Ketua Kwarran Jatinagara`
       const ws = wb.Sheets[wsname];
       const data = XLSX.utils.sheet_to_json(ws);
 
-      if (activeTab === 'regu') {
+      if (subTab === 'rekap') {
+        const aoa = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+        const newGrid = aoa.map(row => row.map(cell => ({ value: cell })));
+        setSpreadsheetData(newGrid);
+        alert('Data rekap berhasil diimpor ke spreadsheet. Jangan lupa klik "Simpan Rekap" untuk menyimpan ke database.');
+        return;
+      }
+
+      if (activeTab === 'regu' || subTab === 'regu') {
         for (const row of data as any[]) {
           await addDoc(collection(db, 'regu'), {
             nama: row['Nama Regu'] || '',
@@ -313,7 +332,7 @@ Ketua Kwarran Jatinagara`
             ].filter(Boolean)
           });
         }
-      } else if (activeTab === 'lomba') {
+      } else if (activeTab === 'lomba' || subTab === 'lomba') {
         for (const row of data as any[]) {
           await addDoc(collection(db, 'lomba'), {
             nama: row['nama Lomba'] || row['Jenis Lomba'] || '',
@@ -322,7 +341,7 @@ Ketua Kwarran Jatinagara`
             kategori: row['Kategori'] || selectedKategori
           });
         }
-      } else if (activeTab === 'nilai') {
+      } else if (activeTab === 'nilai' || subTab === 'nilai') {
         for (const row of data as any[]) {
           const regu = regus.find(r => r.nama === row['Nama Regu'] && r.nomorTenda === row['Nomor Tenda'] && r.kategori === selectedKategori);
           const lomba = lombas.find(l => (l.nama === row['nama Lomba'] || l.nama === row['Jenis Lomba']) && l.kategori === selectedKategori);
@@ -586,7 +605,7 @@ Ketua Kwarran Jatinagara`
                   </div>
                   <div>
                     <h3 className="text-2xl font-black text-black leading-tight uppercase tracking-tight">
-                      {activeTab === 'regu' ? 'Regu Manager' : activeTab === 'lomba' ? 'Lomba Manager' : 'Nilai Entry'}
+                      {subTab === 'regu' ? 'Regu Manager' : subTab === 'lomba' ? 'Lomba Manager' : 'Rekap Nilai'}
                     </h3>
                     <div className="flex items-center gap-2 mt-1">
                       <div className={cn("w-2 h-2 rounded-full animate-pulse", isCurrentCategoryLocked ? "bg-red-500" : "bg-emerald-500")}></div>
@@ -596,7 +615,7 @@ Ketua Kwarran Jatinagara`
                 </div>
                 
                 <p className="text-sm text-gray-600 font-medium leading-relaxed">
-                  Gunakan template Excel untuk melakukan import data {activeTab === 'regu' ? 'regu' : activeTab === 'lomba' ? 'lomba' : 'nilai'} secara massal ke dalam sistem.
+                  Gunakan template Excel untuk melakukan import data {subTab === 'regu' ? 'regu' : subTab === 'lomba' ? 'lomba' : 'nilai'} secara massal ke dalam sistem.
                 </p>
                 
                 <div className="space-y-8 pt-4">
@@ -605,7 +624,7 @@ Ketua Kwarran Jatinagara`
                     <div className="space-y-4">
                       <p className="text-xs font-black text-black uppercase tracking-widest">Unduh Template</p>
                       <button 
-                        onClick={() => downloadTemplate(activeTab)}
+                        onClick={() => downloadTemplate(subTab === 'rekap' ? 'rekap' : subTab)}
                         className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gray-50 border border-gray-100 text-black rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-gray-100 hover:border-gray-200 transition-all shadow-xl"
                       >
                         <Download className="h-4 w-4" /> Download .XLSX
@@ -730,19 +749,33 @@ Ketua Kwarran Jatinagara`
             <div className="p-8 sm:p-12 bg-gray-50/30 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
               <div className="space-y-1">
                 <h3 className="font-black text-black uppercase text-lg sm:text-xl tracking-tight">
-                  {activeTab === 'regu' ? `Database Regu` : activeTab === 'lomba' ? `Master Data Lomba` : `Log Penilaian`}
+                  {subTab === 'rekap' ? 'Rekapitulasi Nilai' : subTab === 'regu' ? 'Database Regu' : 'Master Data Lomba'}
                 </h3>
                 <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Kategori: {selectedKategori}</p>
               </div>
               <div className="flex items-center gap-3">
+                <div className="flex bg-white p-1 rounded-xl border border-gray-100 shadow-sm">
+                  {(['rekap', 'regu', 'lomba'] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setSubTab(t)}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                        subTab === t ? "bg-black text-white" : "text-gray-400 hover:text-black"
+                      )}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
                 <span className="text-[10px] font-black text-gray-600 bg-white border border-gray-100 px-5 py-2 rounded-full shadow-sm uppercase tracking-widest">
-                  {activeTab === 'regu' ? filteredRegus.length : activeTab === 'lomba' ? filteredLombas.length : filteredNilais.length} Records
+                  {subTab === 'regu' ? filteredRegus.length : subTab === 'lomba' ? filteredLombas.length : 'Spreadsheet'}
                 </span>
               </div>
             </div>
             
-            <div className="flex flex-col gap-4">
-              <div className="flex gap-3">
+            <div className="p-8 space-y-8">
+              <div className="flex flex-wrap gap-3">
                 {(['SD Putra', 'SD Putri', 'SMP Putra', 'SMP Putri'] as Kategori[]).map((kat) => (
                   <button
                     key={kat}
@@ -759,41 +792,111 @@ Ketua Kwarran Jatinagara`
                 ))}
               </div>
 
-              <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm">
-                <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-                  <div className="flex gap-2">
-                    <button onClick={addRow} className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all text-xs font-bold flex items-center gap-2">
-                      <Plus className="h-3 w-3" /> Baris
+              {subTab === 'rekap' ? (
+                <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm">
+                  <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                    <div className="flex gap-2">
+                      <button onClick={addRow} className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all text-xs font-bold flex items-center gap-2">
+                        <Plus className="h-3 w-3" /> Baris
+                      </button>
+                      <button onClick={addColumn} className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all text-xs font-bold flex items-center gap-2">
+                        <Plus className="h-3 w-3" /> Kolom
+                      </button>
+                      <label className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all text-xs font-bold flex items-center gap-2 cursor-pointer">
+                        <Upload className="h-3 w-3" /> Import Excel
+                        <input type="file" className="hidden" onChange={handleImportExcelToSpreadsheet} accept=".xlsx, .xls" />
+                      </label>
+                    </div>
+                    <button 
+                      onClick={handleSaveSpreadsheet}
+                      className="px-6 py-2 bg-black text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-800 transition-all flex items-center gap-2"
+                    >
+                      <Save className="h-4 w-4" /> Simpan Rekap
                     </button>
-                    <button onClick={addColumn} className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all text-xs font-bold flex items-center gap-2">
-                      <Plus className="h-3 w-3" /> Kolom
-                    </button>
-                    <label className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all text-xs font-bold flex items-center gap-2 cursor-pointer">
-                      <Upload className="h-3 w-3" /> Import Excel
-                      <input type="file" className="hidden" onChange={handleImportExcelToSpreadsheet} accept=".xlsx, .xls" />
-                    </label>
                   </div>
-                  <button 
-                    onClick={handleSaveSpreadsheet}
-                    className="px-6 py-2 bg-black text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-800 transition-all flex items-center gap-2"
-                  >
-                    <Save className="h-4 w-4" /> Simpan Rekap
-                  </button>
+                  <div className="overflow-auto max-h-[600px] spreadsheet-container">
+                    <Spreadsheet 
+                      data={spreadsheetData} 
+                      onChange={handleSpreadsheetChange}
+                    />
+                  </div>
+                  <p className="p-4 text-[10px] text-gray-400 font-medium italic border-t border-gray-100">
+                    * Gunakan "=" untuk rumus (contoh: =C2+D2). Simpan rekap untuk menampilkan di halaman depan.
+                  </p>
                 </div>
-                <div className="overflow-auto max-h-[600px] spreadsheet-container">
-                  <Spreadsheet 
-                    data={spreadsheetData} 
-                    onChange={handleSpreadsheetChange}
-                  />
+              ) : subTab === 'regu' ? (
+                <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">
+                          <th className="px-6 py-4">Nama Regu</th>
+                          <th className="px-6 py-4">Pangkalan</th>
+                          <th className="px-6 py-4">Nomor Tenda</th>
+                          <th className="px-6 py-4">Pinru</th>
+                          <th className="px-6 py-4 text-right">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredRegus.map(r => (
+                          <tr key={r.id} className="hover:bg-gray-50 transition-all">
+                            <td className="px-6 py-4 text-sm font-black text-black">{r.nama}</td>
+                            <td className="px-6 py-4 text-xs text-gray-500 font-bold">{r.pangkalan}</td>
+                            <td className="px-6 py-4 text-xs text-gray-500 font-bold">{r.nomorTenda}</td>
+                            <td className="px-6 py-4 text-xs text-gray-500 font-bold">{r.pinru}</td>
+                            <td className="px-6 py-4 text-right">
+                              <button onClick={() => deleteDoc(doc(db, 'regu', r.id))} className="text-red-500 hover:text-red-700">
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredRegus.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-6 py-12 text-center text-gray-400 text-xs font-bold uppercase tracking-widest">Belum ada data regu</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-              <p className="text-[10px] text-gray-400 font-medium italic">
-                * Gunakan "=" untuk rumus (contoh: =C2+D2). Simpan rekap untuk menampilkan di halaman depan.
-              </p>
+              ) : (
+                <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">
+                          <th className="px-6 py-4">Nama Lomba</th>
+                          <th className="px-6 py-4">Bidang</th>
+                          <th className="px-6 py-4">Hari</th>
+                          <th className="px-6 py-4 text-right">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredLombas.map(l => (
+                          <tr key={l.id} className="hover:bg-gray-50 transition-all">
+                            <td className="px-6 py-4 text-sm font-black text-black">{l.nama}</td>
+                            <td className="px-6 py-4 text-xs text-gray-500 font-bold">{l.bidangLomba}</td>
+                            <td className="px-6 py-4 text-xs text-gray-500 font-bold">Hari {l.hari}</td>
+                            <td className="px-6 py-4 text-right">
+                              <button onClick={() => deleteDoc(doc(db, 'lomba', l.id))} className="text-red-500 hover:text-red-700">
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredLombas.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="px-6 py-12 text-center text-gray-400 text-xs font-bold uppercase tracking-widest">Belum ada data lomba</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </div>
       {/* Confirm Delete Modal */}
       <ConfirmModal
         isOpen={!!confirmDeleteId}
@@ -804,6 +907,5 @@ Ketua Kwarran Jatinagara`
         confirmLabel="Hapus Sekarang"
       />
     </div>
-  </div>
   );
 }
