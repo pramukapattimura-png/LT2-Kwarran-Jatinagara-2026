@@ -73,6 +73,7 @@ service cloud.firestore {
              (!('mediaUrl' in data) || data.mediaUrl is string) &&
              (!('mediaType' in data) || data.mediaType in ["image", "video"]) &&
              (!('authorName' in data) || data.authorName is string) &&
+             (!('authorEmail' in data) || data.authorEmail is string) &&
              (!('authorPhoto' in data) || data.authorPhoto is string) &&
              (!('likes' in data) || data.likes is list) &&
              data.timestamp is timestamp;

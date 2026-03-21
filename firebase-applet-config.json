@@ -1,10 +1,9 @@
 {
-  "projectId": "gen-lang-client-0590748876",
-  "appId": "1:343315513582:web:b4251c694fa8727027b3ff",
-  "apiKey": "AIzaSyCejohUMqPw-M50qb54lcX2KORTmtGD3hg",
-  "authDomain": "gen-lang-client-0590748876.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-1785cdd7-2d6d-4804-a399-82e044ce5a82",
-  "storageBucket": "gen-lang-client-0590748876.firebasestorage.app",
-  "messagingSenderId": "343315513582",
-  "measurementId": ""
+  "projectId": "lt2-jatinagara",
+  "appId": "1:893231840975:web:85fe1977d46da7b03301ba",
+  "apiKey": "AIzaSyC845nXSKqsaDa8ULdez6GmknqDUmgVBgo",
+  "authDomain": "lt2-jatinagara.firebaseapp.com",
+  "storageBucket": "lt2-jatinagara.firebasestorage.app",
+  "messagingSenderId": "893231840975",
+  "measurementId": "G-PGELE8LKQN"
 }

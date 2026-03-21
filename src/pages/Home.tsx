@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { db, collection, onSnapshot, query, orderBy, doc, auth, GoogleAuthProvider, signInWithPopup, addDoc, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteDoc } from '../firebase';
+import { db, collection, onSnapshot, query, orderBy, doc, auth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, addDoc, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteDoc } from '../firebase';
 import { Regu, Lomba, Nilai, Kategori, ScoreSummary, Berita, AppConfig } from '../types';
 import { Trophy, Medal, Search, Filter, ChevronRight, ChevronDown, Newspaper, Play, Image as ImageIcon, ArrowDownCircle, Heart, MessageCircle, Share2, MoreHorizontal, Trash2, LogIn, User, Info, FileSpreadsheet } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -45,6 +45,20 @@ export default function Home() {
 
   useEffect(() => {
     const unsubscribeAuth = auth.onAuthStateChanged((u) => setUser(u));
+    
+    // Check for redirect result
+    const checkRedirect = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          setUser(result.user);
+        }
+      } catch (err) {
+        console.error('Redirect result error:', err);
+      }
+    };
+    checkRedirect();
+
     return () => unsubscribeAuth();
   }, []);
 
@@ -60,9 +74,21 @@ export default function Home() {
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
+      // Try popup first
       await signInWithPopup(auth, provider);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
+      // If popup blocked or on mobile, try redirect
+      if (error.code === 'auth/popup-blocked' || /Android|iPhone|iPad/i.test(navigator.userAgent)) {
+        try {
+          await signInWithRedirect(auth, provider);
+        } catch (redirectError) {
+          console.error('Redirect login error:', redirectError);
+          setToast({ message: 'Gagal login. Silakan coba lagi.', type: 'error' });
+        }
+      } else {
+        setToast({ message: 'Gagal login. Silakan coba lagi.', type: 'error' });
+      }
     }
   };
 
@@ -300,13 +326,24 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-                <motion.button
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => user ? setIsCreatingPost(true) : handleLogin()}
-                  className="flex-grow bg-brown-800/50 hover:bg-brown-800 rounded-full px-4 py-2 text-left text-brown-300 font-medium transition-colors text-sm"
-                >
-                  {user ? `Apa yang Anda pikirkan, ${user.displayName?.split(' ')[0]}?` : 'Apa yang Anda pikirkan? Login untuk berbagi.'}
-                </motion.button>
+                {user ? (
+                  <motion.button
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setIsCreatingPost(true)}
+                    className="flex-grow bg-brown-800/50 hover:bg-brown-800 rounded-full px-4 py-2 text-left text-brown-300 font-medium transition-colors text-sm"
+                  >
+                    Apa yang Anda pikirkan, {user.displayName?.split(' ')[0]}?
+                  </motion.button>
+                ) : (
+                  <motion.button
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleLogin}
+                    className="flex-grow flex items-center gap-3 bg-brown-600 hover:bg-brown-500 text-white rounded-full px-4 py-2 text-left transition-colors text-sm font-black uppercase tracking-widest shadow-lg shadow-brown-950/20"
+                  >
+                    <LogIn className="h-4 w-4" />
+                    <span>Login Google untuk Berbagi</span>
+                  </motion.button>
+                )}
               </div>
               
               <div className="flex items-center gap-1 pt-2 border-t border-brown-800">
