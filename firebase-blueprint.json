@@ -88,7 +88,20 @@
       "type": "object",
       "properties": {
         "isLocked": { "type": "boolean" },
-        "lockedCategories": { "type": "object" }
+        "lockedCategories": { "type": "object" },
+        "marqueeText": { "type": "string" },
+        "adminEmails": { "type": "array", "items": { "type": "string" } },
+        "aboutContent": { "type": "string" },
+        "aboutImage": { "type": "string" }
+      }
+    },
+    "RekapNilai": {
+      "title": "RekapNilai",
+      "description": "Data rekap nilai dalam bentuk grid spreadsheet",
+      "type": "object",
+      "properties": {
+        "grid": { "type": "array", "items": { "type": "array", "items": { "type": "object" } } },
+        "updatedAt": { "type": "string", "format": "date-time" }
       }
     }
   },
@@ -116,6 +129,10 @@
     "/settings": {
       "schema": "AppConfig",
       "description": "Global application settings"
+    },
+    "/settings/rekap_{category}": {
+      "schema": "RekapNilai",
+      "description": "Rekap nilai per kategori"
     }
   }
 }

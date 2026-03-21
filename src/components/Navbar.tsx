@@ -30,11 +30,11 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="bg-white/90 backdrop-blur-md border-b border-brown-100 sticky top-0 z-50">
+    <nav className="bg-black border-b border-gray-800 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 sm:h-20 items-center">
           <Link to="/" className="flex items-center gap-2 sm:gap-3 group">
-            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl overflow-hidden shadow-lg shadow-brown-200 group-hover:scale-110 transition-transform duration-300 flex items-center justify-center bg-white">
+            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl overflow-hidden shadow-lg shadow-gray-200 group-hover:scale-110 transition-transform duration-300 flex items-center justify-center bg-white">
               <img 
                 src={APP_LOGO_URL} 
                 alt="Logo LT2 Jatinagara" 
@@ -43,22 +43,22 @@ export default function Navbar() {
               />
             </div>
             <div className="flex flex-col">
-              <span className="text-lg sm:text-2xl font-black text-brown-900 tracking-tighter leading-none">
-                LT2 <span className="text-brown-600">Jatinagara</span>
+              <span className="text-lg sm:text-2xl font-black text-white tracking-tighter leading-none">
+                LT2 <span className="text-gray-400">Jatinagara</span>
               </span>
-              <span className="text-[8px] sm:text-[10px] font-bold text-brown-400 uppercase tracking-[0.2em] mt-0.5">
+              <span className="text-[8px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] mt-0.5">
                 Scout Competition
               </span>
             </div>
           </Link>
           
           <div className="flex items-center gap-2 sm:gap-4">
-            <Link to="/" className="text-xs sm:text-sm font-bold text-brown-600 hover:text-brown-900 px-2 sm:px-3 py-2 transition-colors">Scoreboard</Link>
+            <Link to="/" className="text-xs sm:text-sm font-bold text-gray-300 hover:text-white px-2 sm:px-3 py-2 transition-colors">Scoreboard</Link>
             {user ? (
               <>
                 <Link 
                   to="/admin" 
-                  className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl bg-brown-50 text-brown-700 hover:bg-brown-100 transition-all text-xs sm:text-sm font-bold border border-brown-100"
+                  className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl bg-gray-800 text-white hover:bg-gray-700 transition-all text-xs sm:text-sm font-bold border border-gray-700"
                 >
                   <LayoutDashboard className="h-4 w-4" />
                   <span className="hidden xs:inline">Admin</span>
@@ -75,17 +75,17 @@ export default function Navbar() {
               <div className="relative" ref={menuRef}>
                 <button 
                   onClick={() => setShowMenu(!showMenu)}
-                  className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl hover:bg-brown-50 text-brown-600 transition-all border border-transparent hover:border-brown-100"
+                  className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl hover:bg-gray-800 text-white transition-all border border-transparent hover:border-gray-700"
                   title="Menu"
                 >
                   <MoreVertical className="h-5 w-5" />
                 </button>
                 {showMenu && (
-                  <div className="absolute right-0 mt-2 w-32 bg-white rounded-xl shadow-xl border border-brown-100 py-1 z-50 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="absolute right-0 mt-2 w-32 bg-black rounded-xl shadow-xl border border-gray-800 py-1 z-50 animate-in fade-in zoom-in-95 duration-200">
                     <Link 
                       to="/login" 
                       onClick={() => setShowMenu(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-bold text-brown-700 hover:bg-brown-50 transition-all"
+                      className="flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-bold text-white hover:bg-gray-800 transition-all"
                     >
                       <LogIn className="h-4 w-4" />
                       <span>Login</span>

@@ -71,3 +71,9 @@ export interface Berita {
   likes?: string[];
   timestamp: any;
 }
+
+export interface RekapNilai {
+  id: string;
+  grid: any[][];
+  updatedAt: any;
+}

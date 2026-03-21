@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { db, collection, onSnapshot, query, orderBy, doc, auth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, addDoc, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteDoc, handleFirestoreError, OperationType } from '../firebase';
-import { Regu, Lomba, Nilai, Kategori, ScoreSummary, Berita, AppConfig } from '../types';
-import { Trophy, Medal, Search, Filter, ChevronRight, ChevronDown, Newspaper, Play, Image as ImageIcon, ArrowDownCircle, Heart, MessageCircle, Share2, MoreHorizontal, Trash2, LogIn, User, Info, FileSpreadsheet } from 'lucide-react';
+import { Regu, Lomba, Nilai, Kategori, ScoreSummary, Berita, AppConfig, RekapNilai } from '../types';
+import { Trophy, Medal, Search, Filter, ChevronRight, ChevronDown, Newspaper, Play, Image as ImageIcon, ArrowDownCircle, Heart, MessageCircle, Share2, MoreHorizontal, Trash2, LogIn, User, Info, FileSpreadsheet, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import CommentSection, { CommentSectionRef } from '../components/CommentSection';
 import ConfirmModal from '../components/ConfirmModal';
 import { formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale';
+import { Parser } from 'hot-formula-parser';
 
 export default function Home() {
   const [regus, setRegus] = useState<Regu[]>([]);
@@ -15,6 +16,7 @@ export default function Home() {
   const [nilais, setNilais] = useState<Nilai[]>([]);
   const [berita, setBerita] = useState<Berita[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [rekapData, setRekapData] = useState<Record<string, any[][]>>({});
   const [activeKategori, setActiveKategori] = useState<Kategori | 'Semua'>('Semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRegu, setExpandedRegu] = useState<string | null>(null);
@@ -95,7 +97,20 @@ export default function Home() {
       handleFirestoreError(error, OperationType.GET, 'settings/global');
     });
 
-    return () => { unsubRegu(); unsubLomba(); unsubNilai(); unsubBerita(); unsubConfig(); };
+    const categories: Kategori[] = ['SD Putra', 'SD Putri', 'SMP Putra', 'SMP Putri'];
+    const unsubRekaps = categories.map(cat => 
+      onSnapshot(doc(db, 'settings', `rekap_${cat.replace(' ', '_')}`), (s) => {
+        if (s.exists()) {
+          const data = s.data() as RekapNilai;
+          setRekapData(prev => ({ ...prev, [cat]: data.grid }));
+        }
+      })
+    );
+
+    return () => { 
+      unsubRegu(); unsubLomba(); unsubNilai(); unsubBerita(); unsubConfig(); 
+      unsubRekaps.forEach(unsub => unsub());
+    };
   }, []);
 
   const handleLogin = async () => {
@@ -255,11 +270,67 @@ export default function Home() {
 
   const categories: (Kategori | 'Semua')[] = ['Semua', 'SD Putra', 'SD Putri', 'SMP Putra', 'SMP Putri'];
 
+  const RekapTable = ({ grid }: { grid: any[][] }) => {
+    const parser = new Parser();
+    
+    parser.on('callCellValue', (cellCoord, done) => {
+      const { row, column } = cellCoord;
+      const cell = grid[row.index]?.[column.index];
+      let value = cell?.value;
+      if (typeof value === 'string' && value.startsWith('=')) {
+        const result = parser.parse(value.substring(1));
+        done(result.error ? 0 : result.result);
+      } else {
+        done(Number(value) || 0);
+      }
+    });
+
+    const getCellValue = (cell: any) => {
+      if (typeof cell?.value === 'string' && cell.value.startsWith('=')) {
+        const result = parser.parse(cell.value.substring(1));
+        return result.error ? '#ERR' : result.result;
+      }
+      return cell?.value || "";
+    };
+
+    return (
+      <div className="bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50/50 text-gray-500 uppercase text-[9px] font-black tracking-widest border-b border-gray-100">
+                {grid[0]?.map((cell, i) => (
+                  <th key={i} className="px-6 py-4 border-r border-gray-100 last:border-r-0 text-center">
+                    {cell.value}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {grid.slice(1).map((row, rIdx) => (
+                <tr key={rIdx} className="hover:bg-gray-50/80 transition-all group">
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} className={cn(
+                      "px-6 py-4 text-sm font-black border-r border-gray-100 last:border-r-0 text-center tabular-nums",
+                      cIdx === 0 ? "text-gray-400" : "text-gray-800"
+                    )}>
+                      {getCellValue(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-8 sm:space-y-12">
       {/* Marquee Text */}
       {config?.marqueeText && (
-        <div className="bg-brown-900 text-white py-3 marquee-container border-y border-brown-800">
+        <div className="bg-black text-white py-3 marquee-container border-y border-gray-800">
           <div className="marquee-content font-black uppercase tracking-[0.3em] text-[10px] sm:text-xs">
             {config.marqueeText} • {config.marqueeText} • {config.marqueeText} • {config.marqueeText}
           </div>
@@ -271,15 +342,15 @@ export default function Home() {
         <div className="space-y-3 sm:space-y-4">
           {/* Main Tab Navigation */}
           <div className="flex justify-center">
-            <div className="flex w-full bg-brown-900/50 backdrop-blur-md p-1 rounded-[2rem] border border-brown-800 shadow-2xl max-w-2xl">
+            <div className="flex w-full bg-gray-100 p-1 rounded-[2rem] border border-gray-200 shadow-xl max-w-2xl">
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setActiveMainTab('berita')}
                   className={cn(
                     "flex-1 px-1 sm:px-8 py-2.5 sm:py-3.5 rounded-[1.5rem] text-[clamp(8px,2.5vw,12px)] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest transition-all flex items-center justify-center gap-1 sm:gap-2",
                     activeMainTab === 'berita'
-                      ? "bg-brown-500 text-white shadow-xl shadow-brown-900/50 scale-[1.02]"
-                      : "text-brown-400 hover:text-brown-200 hover:bg-brown-800/50"
+                      ? "bg-black text-white shadow-xl shadow-gray-200 scale-[1.02]"
+                      : "text-gray-500 hover:text-black hover:bg-gray-200/50"
                   )}
                 >
                   <Newspaper className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -291,8 +362,8 @@ export default function Home() {
                   className={cn(
                     "flex-1 px-1 sm:px-8 py-2.5 sm:py-3.5 rounded-[1.5rem] text-[clamp(8px,2.5vw,12px)] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest transition-all flex items-center justify-center gap-1 sm:gap-2",
                     activeMainTab === 'rekap'
-                      ? "bg-brown-500 text-white shadow-xl shadow-brown-900/50 scale-[1.02]"
-                      : "text-brown-400 hover:text-brown-200 hover:bg-brown-800/50"
+                      ? "bg-black text-white shadow-xl shadow-gray-200 scale-[1.02]"
+                      : "text-black hover:bg-gray-200/50"
                   )}
                 >
                   <Trophy className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -304,12 +375,12 @@ export default function Home() {
                   className={cn(
                     "flex-1 px-1 sm:px-8 py-2.5 sm:py-3.5 rounded-[1.5rem] text-[clamp(8px,2.5vw,12px)] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest transition-all flex items-center justify-center gap-1 sm:gap-2",
                     activeMainTab === 'drive'
-                      ? "bg-brown-500 text-white shadow-xl shadow-brown-900/50 scale-[1.02]"
-                      : "text-brown-400 hover:text-brown-200 hover:bg-brown-800/50"
+                      ? "bg-black text-white shadow-xl shadow-gray-200 scale-[1.02]"
+                      : "text-black hover:bg-gray-200/50"
                   )}
                 >
                   <FileSpreadsheet className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span className="truncate">Juknis</span>
+                  <span className="truncate">Dokumen</span>
                 </motion.button>
                 <motion.button
                   whileTap={{ scale: 0.95 }}
@@ -317,8 +388,8 @@ export default function Home() {
                   className={cn(
                     "flex-1 px-1 sm:px-8 py-2.5 sm:py-3.5 rounded-[1.5rem] text-[clamp(8px,2.5vw,12px)] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest transition-all flex items-center justify-center gap-1 sm:gap-2",
                     activeMainTab === 'tentang'
-                      ? "bg-brown-500 text-white shadow-xl shadow-brown-900/50 scale-[1.02]"
-                      : "text-brown-400 hover:text-brown-200 hover:bg-brown-800/50"
+                      ? "bg-black text-white shadow-xl shadow-gray-200 scale-[1.02]"
+                      : "text-black hover:bg-gray-200/50"
                   )}
                 >
                   <Info className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -328,20 +399,20 @@ export default function Home() {
             </div>
           </div>
           
-          <div className="border-t border-brown-100"></div>
+          <div className="border-t border-gray-100"></div>
         
         {activeMainTab === 'berita' ?
           /* News Section */
           <div className="space-y-6">
             {/* Create Post Section - Prominent and accessible */}
-            <div className="z-30 -mx-2 px-2 pb-2 bg-brown-50/30 backdrop-blur-sm">
-              <div className="bg-brown-900/60 backdrop-blur-xl rounded-2xl border border-brown-800 p-3 sm:p-4 shadow-2xl space-y-4 ring-1 ring-brown-700/50">
+            <div className="z-30 -mx-2 px-2 pb-2 bg-white/80 backdrop-blur-sm">
+              <div className="bg-white rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-xl space-y-4 ring-1 ring-gray-100">
                 <div className="flex gap-3">
-                  <div className="h-10 w-10 rounded-full overflow-hidden bg-brown-800 border border-brown-700 flex-shrink-0">
+                  <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100 border border-gray-200 flex-shrink-0">
                     {user?.photoURL ? (
                       <img src={user.photoURL} alt={user.displayName || ''} className="h-full w-full object-cover" />
                     ) : (
-                      <div className="h-full w-full flex items-center justify-center text-brown-400">
+                      <div className="h-full w-full flex items-center justify-center text-gray-400">
                         <User className="h-5 w-5" />
                       </div>
                     )}
@@ -350,7 +421,7 @@ export default function Home() {
                     <motion.button
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setIsCreatingPost(true)}
-                      className="flex-grow bg-brown-800/50 hover:bg-brown-800 rounded-full px-4 py-2 text-left text-brown-300 font-medium transition-colors text-sm border border-brown-700/30"
+                      className="flex-grow bg-gray-50 hover:bg-gray-100 rounded-full px-4 py-2 text-left text-gray-500 font-medium transition-colors text-sm border border-gray-200"
                     >
                       Apa yang Anda pikirkan, {user.displayName?.split(' ')[0]}?
                     </motion.button>
@@ -358,7 +429,7 @@ export default function Home() {
                     <motion.button
                       whileTap={{ scale: 0.98 }}
                       onClick={handleLogin}
-                      className="flex-grow flex items-center gap-3 bg-brown-600 hover:bg-brown-500 text-white rounded-full px-4 py-2 text-left transition-colors text-sm font-black uppercase tracking-widest shadow-lg shadow-brown-950/20"
+                      className="flex-grow flex items-center gap-3 bg-black hover:bg-gray-900 text-white rounded-full px-4 py-2 text-left transition-colors text-sm font-black uppercase tracking-widest shadow-lg"
                     >
                       <LogIn className="h-4 w-4" />
                       <span>Login untuk Berbagi</span>
@@ -366,10 +437,10 @@ export default function Home() {
                   )}
                 </div>
                 
-                <div className="flex items-center gap-1 pt-2 border-t border-brown-800/50">
+                <div className="flex items-center gap-1 pt-2 border-t border-gray-100">
                   <motion.label 
                     whileTap={{ scale: 0.95 }}
-                    className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-brown-800/50 rounded-lg transition-colors text-brown-300 text-xs sm:text-sm font-bold cursor-pointer"
+                    className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-gray-50 rounded-lg transition-colors text-gray-600 text-xs sm:text-sm font-bold cursor-pointer"
                   >
                     <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500" />
                     <span>Foto</span>
@@ -389,7 +460,7 @@ export default function Home() {
                   </motion.label>
                   <motion.label 
                     whileTap={{ scale: 0.95 }}
-                    className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-brown-800/50 rounded-lg transition-colors text-brown-300 text-xs sm:text-sm font-bold cursor-pointer"
+                    className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-gray-50 rounded-lg transition-colors text-gray-600 text-xs sm:text-sm font-bold cursor-pointer"
                   >
                     <Play className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />
                     <span>Video</span>
@@ -413,10 +484,10 @@ export default function Home() {
 
             <div className="flex items-end justify-between px-2">
               <div className="space-y-1">
-                <h2 className="text-lg sm:text-xl md:text-2xl font-black text-brown-900 tracking-tighter uppercase">
-                  Berita & <span className="text-brown-500">Dokumentasi</span>
+                <h2 className="text-lg sm:text-xl md:text-2xl font-black text-black tracking-tighter uppercase">
+                  Berita & <span className="text-gray-600">Dokumentasi</span>
                 </h2>
-                <p className="text-[10px] sm:text-xs text-brown-400 font-bold uppercase tracking-[0.2em]">Kabar terbaru dari lapangan</p>
+                <p className="text-[10px] sm:text-xs text-gray-500 font-bold uppercase tracking-[0.2em]">Kabar terbaru dari lapangan</p>
               </div>
             </div>
 
@@ -428,30 +499,30 @@ export default function Home() {
                     initial={{ opacity: 0, y: 20 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
-                    className="bg-brown-900/40 backdrop-blur-md rounded-2xl border border-brown-800 overflow-hidden shadow-2xl"
+                    className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xl"
                   >
                     {/* Post Header */}
                     <div className="p-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full overflow-hidden bg-brown-800 border border-brown-700">
+                        <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-50 border border-gray-100">
                           {item.authorPhoto ? (
                             <img src={item.authorPhoto} alt={item.authorName} className="h-full w-full object-cover" />
                           ) : (
-                            <div className="h-full w-full flex items-center justify-center text-brown-400">
+                            <div className="h-full w-full flex items-center justify-center text-gray-400">
                               <User className="h-5 w-5" />
                             </div>
                           )}
                         </div>
                         <div>
-                          <div className="font-black text-brown-50 text-sm hover:underline cursor-pointer flex items-center gap-2">
+                          <div className="font-black text-black text-sm hover:underline cursor-pointer flex items-center gap-2">
                             {item.authorName || 'Panitia'}
                             {item.authorEmail && (
-                              <span className="text-[9px] font-bold text-brown-400 lowercase bg-brown-800 px-1.5 py-0.5 rounded border border-brown-700">
+                              <span className="text-[9px] font-bold text-gray-500 lowercase bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
                                 {item.authorEmail}
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] font-bold text-brown-500 uppercase tracking-widest flex items-center gap-1">
+                          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
                             {item.timestamp ? formatDistanceToNow(item.timestamp.toDate(), { addSuffix: true, locale: id }) : 'Baru saja'}
                             <span>•</span>
                             <User className="h-2.5 w-2.5" />
@@ -465,20 +536,20 @@ export default function Home() {
                             e.stopPropagation();
                             setOpenMenuId(openMenuId === item.id ? null : item.id);
                           }}
-                          className="p-2 text-brown-400 hover:bg-brown-800 rounded-full transition-all"
+                          className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-all"
                         >
                           <MoreHorizontal className="h-5 w-5" />
                         </motion.button>
 
                         {openMenuId === item.id && (
-                          <div className="absolute right-0 top-full mt-1 w-48 bg-brown-900 rounded-xl shadow-2xl border border-brown-800 py-1 z-50 animate-in fade-in zoom-in-95 duration-200">
+                          <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-2xl border border-gray-100 py-1 z-50 animate-in fade-in zoom-in-95 duration-200">
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setOpenMenuId(null);
                                 handleSharePost(item.id);
                               }}
-                              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-brown-300 hover:bg-brown-800 transition-colors"
+                              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                             >
                               <Share2 className="h-4 w-4" />
                               <span>Salin Tautan</span>
@@ -490,7 +561,7 @@ export default function Home() {
                                   setOpenMenuId(null);
                                   setConfirmDeleteId(item.id);
                                 }}
-                                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-red-900/30 transition-colors"
+                                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                               >
                                 <Trash2 className="h-4 w-4" />
                                 <span>Hapus Postingan</span>
@@ -503,10 +574,10 @@ export default function Home() {
 
                     {/* Post Content */}
                     <div className="px-4 pb-3 space-y-3">
-                      {item.title && <h3 className="text-lg font-black text-brown-50 leading-tight">{item.title}</h3>}
+                      {item.title && <h3 className="text-lg font-black text-black leading-tight">{item.title}</h3>}
                       <div className="relative">
                         <p className={cn(
-                          "text-sm text-brown-200 font-medium leading-relaxed whitespace-pre-wrap",
+                          "text-sm text-gray-800 font-medium leading-relaxed whitespace-pre-wrap",
                           !expandedPosts.has(item.id) && item.content.length > 300 && "line-clamp-4"
                         )}>
                           {item.content}
@@ -514,7 +585,7 @@ export default function Home() {
                         {!expandedPosts.has(item.id) && item.content.length > 300 && (
                           <button 
                             onClick={() => setExpandedPosts(prev => new Set(prev).add(item.id))}
-                            className="text-sm font-bold text-brown-400 hover:text-brown-50 mt-1"
+                            className="text-sm font-bold text-gray-500 hover:text-black mt-1"
                           >
                             Lihat selengkapnya...
                           </button>
@@ -524,7 +595,7 @@ export default function Home() {
 
                     {/* Post Media */}
                     {item.mediaUrl && (
-                      <div className="bg-brown-950/50 border-y border-brown-800">
+                      <div className="bg-gray-50 border-y border-gray-100">
                         {item.mediaType === 'video' ? (
                           <video src={item.mediaUrl} controls className="w-full max-h-[600px] object-contain mx-auto" />
                         ) : (
@@ -535,26 +606,26 @@ export default function Home() {
 
                     {/* Post Stats */}
                     {(item.likes?.length > 0) && (
-                      <div className="px-4 py-2 flex items-center justify-between border-b border-brown-800">
+                      <div className="px-4 py-2 flex items-center justify-between border-b border-gray-100">
                         <div className="flex items-center gap-1.5">
                           <div className="flex -space-x-1">
-                            <div className="h-4 w-4 rounded-full bg-red-600 flex items-center justify-center ring-2 ring-brown-900">
+                            <div className="h-4 w-4 rounded-full bg-red-600 flex items-center justify-center ring-2 ring-white">
                               <Heart className="h-2.5 w-2.5 text-white fill-current" />
                             </div>
                           </div>
-                          <span className="text-xs text-brown-400 font-bold">{item.likes.length}</span>
+                          <span className="text-xs text-gray-500 font-bold">{item.likes.length}</span>
                         </div>
                       </div>
                     )}
 
                     {/* Post Actions */}
-                    <div className="px-2 py-1 flex items-center justify-around border-b border-brown-800">
+                    <div className="px-2 py-1 flex items-center justify-around border-b border-gray-100">
                       <motion.button 
                         whileTap={{ scale: 0.95 }}
                         onClick={() => handleLikePost(item)}
                         className={cn(
-                          "flex-grow flex items-center justify-center gap-2 py-2 hover:bg-brown-800/50 rounded-lg transition-colors text-sm font-bold",
-                          item.likes?.includes(user?.uid || '') ? "text-red-500" : "text-brown-400"
+                          "flex-grow flex items-center justify-center gap-2 py-2 hover:bg-gray-50 rounded-lg transition-colors text-sm font-bold",
+                          item.likes?.includes(user?.uid || '') ? "text-red-500" : "text-gray-500"
                         )}
                       >
                         <Heart className={cn("h-5 w-5", item.likes?.includes(user?.uid || '') && "fill-current")} />
@@ -565,7 +636,7 @@ export default function Home() {
                         onClick={() => {
                           commentRefs.current[item.id]?.focusInput();
                         }}
-                        className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-brown-800/50 rounded-lg transition-colors text-brown-400 text-sm font-bold"
+                        className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-gray-50 rounded-lg transition-colors text-gray-500 text-sm font-bold"
                       >
                         <MessageCircle className="h-5 w-5" />
                         <span>Komentar</span>
@@ -573,7 +644,7 @@ export default function Home() {
                       <motion.button 
                         whileTap={{ scale: 0.95 }}
                         onClick={() => handleSharePost(item.id)}
-                        className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-brown-800/50 rounded-lg transition-colors text-brown-400 text-sm font-bold"
+                        className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-gray-50 rounded-lg transition-colors text-gray-500 text-sm font-bold"
                       >
                         <Share2 className="h-5 w-5" />
                         <span>Bagikan</span>
@@ -592,234 +663,78 @@ export default function Home() {
                 ))}
               </div>
             ) : (
-              <div className="py-20 text-center bg-brown-900/40 backdrop-blur-md rounded-2xl border border-brown-800 border-dashed shadow-2xl">
-                <div className="bg-brown-800 h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Newspaper className="h-8 w-8 text-brown-600" />
+              <div className="py-20 text-center bg-gray-50 rounded-2xl border border-gray-100 border-dashed shadow-sm">
+                <div className="bg-gray-100 h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Newspaper className="h-8 w-8 text-gray-400" />
                 </div>
-                <p className="text-brown-500 font-black uppercase tracking-widest text-xs">Belum ada berita diposting</p>
+                <p className="text-gray-500 font-black uppercase tracking-widest text-xs">Belum ada berita diposting</p>
               </div>
             )}
           </div>
         : activeMainTab === 'rekap' ?
-          /* Filters & Leaderboard Section */
+          /* Detailed Leaderboard Tables Section */
           <div id="leaderboard" className="scroll-mt-32 space-y-16 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <div className="bg-brown-900/80 backdrop-blur-xl p-4 sm:p-6 rounded-[2.5rem] shadow-2xl shadow-brown-950/40 border border-brown-800 flex flex-col lg:flex-row gap-6 items-center justify-between">
-              <div className="overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 custom-scrollbar">
-                <div className="flex gap-2 min-w-max">
-                  {categories.map(cat => (
-                    <motion.button
-                      whileTap={{ scale: 0.95 }}
-                      key={cat}
-                      onClick={() => setActiveKategori(cat)}
-                      className={cn(
-                        "px-6 py-3 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all duration-300 border-2",
-                        activeKategori === cat 
-                          ? "bg-brown-600 text-white border-brown-600 shadow-xl shadow-brown-950" 
-                          : "bg-brown-800/50 text-brown-400 border-brown-800 hover:border-brown-700 hover:text-brown-200"
-                      )}
-                    >
-                      {cat}
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
-              <div className="relative w-full lg:w-96 group">
-                <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-brown-500 group-focus-within:text-brown-300 transition-colors" />
-                <input
-                  type="text"
-                  placeholder="Cari regu atau pangkalan..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-14 pr-6 py-4 rounded-2xl border-2 border-brown-800 focus:border-brown-600 outline-none transition-all bg-brown-950/30 font-medium text-brown-50 placeholder:text-brown-600"
-                />
+            <div className="text-center space-y-4">
+              <h2 className="text-3xl sm:text-5xl font-black text-black uppercase tracking-tighter leading-none">
+                Rekapitulasi Nilai <span className="text-gray-500">LT2 Jatinagara</span>
+              </h2>
+              <div className="flex items-center justify-center gap-4">
+                <div className="h-px w-12 bg-gray-200"></div>
+                <p className="text-[10px] sm:text-xs text-gray-400 font-black uppercase tracking-[0.3em]">Update: {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                <div className="h-px w-12 bg-gray-200"></div>
               </div>
             </div>
 
-            {/* Leaderboard Section */}
-            <div className="space-y-8">
-              <div className="flex items-end justify-between px-2">
-                <div className="space-y-1">
-                  <h2 className="text-[clamp(8px,3.5vw,24px)] sm:text-xl md:text-2xl font-black text-brown-900 tracking-tighter uppercase whitespace-nowrap">
-                    Klasemen <span className="text-brown-500">Teratas</span>
-                  </h2>
-                  <p className="text-xs text-brown-400 font-bold uppercase tracking-[0.2em]">Update: {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                </div>
-              </div>
+            <div className="space-y-20">
+              {[
+                { id: 'SD Putra', label: 'Putra SD/MI' },
+                { id: 'SMP Putra', label: 'Putra SMP/MTS' },
+                { id: 'SD Putri', label: 'Putri SD/MI' },
+                { id: 'SMP Putri', label: 'Putri SMP/MTS' }
+              ].map(cat => {
+                const grid = rekapData[cat.id];
+                if (!grid || grid.length <= 1) return null;
 
-              <div className="bg-brown-900/40 backdrop-blur-md rounded-[3rem] shadow-2xl border border-brown-800 overflow-hidden">
-                {/* Desktop Table View */}
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-brown-800/50 text-brown-400 uppercase text-[10px] font-black tracking-[0.3em] border-b border-brown-800">
-                        <th className="px-10 py-6 w-32">Rank</th>
-                        <th className="px-10 py-6">Identity</th>
-                        <th className="px-10 py-6">Category</th>
-                        <th className="px-10 py-6 text-right">Total Score</th>
-                        <th className="px-10 py-6 w-16"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-brown-800">
-                      {filteredSummaries.map((s, index) => (
-                        <React.Fragment key={s.regu.id}>
-                          <motion.tr 
-                            whileHover={{ backgroundColor: "rgba(69, 26, 3, 0.4)" }}
-                            className={cn(
-                              "transition-all cursor-pointer group",
-                              expandedRegu === s.regu.id && "bg-brown-800/60"
-                            )}
-                            onClick={() => setExpandedRegu(expandedRegu === s.regu.id ? null : s.regu.id)}
-                          >
-                            <td className="px-10 py-8">
-                              <div className={cn(
-                                "h-14 w-14 rounded-2xl flex items-center justify-center font-black text-2xl shadow-xl transition-transform group-hover:scale-110",
-                                index === 0 ? "bg-gradient-to-br from-yellow-400 to-yellow-600 text-white rotate-3" :
-                                index === 1 ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white" :
-                                index === 2 ? "bg-gradient-to-br from-amber-600 to-amber-800 text-white -rotate-3" :
-                                "bg-brown-800 text-brown-300 border border-brown-700"
-                              )}>
-                                {index + 1}
-                              </div>
-                            </td>
-                            <td className="px-10 py-8">
-                              <div className="font-black text-brown-50 group-hover:text-brown-200 transition-colors text-xl tracking-tight leading-none">{s.regu.nama}</div>
-                              <div className="text-xs text-brown-400 font-bold uppercase tracking-[0.15em] mt-2">{s.regu.pangkalan}</div>
-                            </td>
-                            <td className="px-10 py-8">
-                              <span className="px-4 py-2 rounded-full bg-brown-800 text-brown-300 text-[10px] font-black uppercase tracking-widest border border-brown-700">
-                                {s.regu.kategori}
-                              </span>
-                            </td>
-                            <td className="px-10 py-8 text-right font-black text-brown-50 text-4xl tabular-nums tracking-tighter">
-                              {s.totalScore.toLocaleString()}
-                            </td>
-                            <td className="px-10 py-8">
-                              <div className={cn(
-                                "p-2 rounded-full transition-all duration-300",
-                                expandedRegu === s.regu.id ? "bg-brown-600 text-white rotate-180" : "bg-brown-800 text-brown-400 group-hover:text-brown-200"
-                              )}>
-                                <ChevronDown className="h-5 w-5" />
-                              </div>
-                            </td>
-                          </motion.tr>
-                          {expandedRegu === s.regu.id && (
-                            <tr className="bg-brown-950/40">
-                              <td colSpan={5} className="px-10 py-12">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                                  {lombas.map(l => (
-                                    <motion.div 
-                                      initial={{ opacity: 0, y: 10 }}
-                                      animate={{ opacity: 1, y: 0 }}
-                                      key={l.id} 
-                                      className="flex flex-col p-6 bg-brown-900/60 rounded-3xl border border-brown-800 shadow-xl hover:bg-brown-800/80 transition-all group/item"
-                                    >
-                                      <span className="text-[10px] text-brown-400 uppercase font-black tracking-widest mb-1">Hari {l.hari}</span>
-                                      <span className="text-xs font-black text-brown-50 group-hover/item:text-brown-200 transition-colors mb-4 leading-tight">{l.nama}</span>
-                                      <div className="mt-auto pt-4 border-t border-brown-800 flex justify-between items-end">
-                                        <span className="text-[9px] font-bold text-brown-400 uppercase">Score</span>
-                                        <span className="font-black text-brown-50 text-2xl tabular-nums leading-none">
-                                          {s.lombaScores[l.id] || 0}
-                                        </span>
-                                      </div>
-                                    </motion.div>
-                                  ))}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile Card View */}
-                <div className="md:hidden divide-y divide-brown-800">
-                  {filteredSummaries.map((s, index) => (
-                    <div key={s.regu.id} className="p-6 space-y-6">
-                      <div 
-                        className="flex items-center justify-between cursor-pointer"
-                        onClick={() => setExpandedRegu(expandedRegu === s.regu.id ? null : s.regu.id)}
-                      >
-                        <div className="flex items-center gap-5">
-                          <div className={cn(
-                            "h-16 w-16 rounded-3xl flex items-center justify-center font-black text-2xl shadow-xl flex-shrink-0",
-                            index === 0 ? "bg-gradient-to-br from-yellow-400 to-yellow-600 text-white" :
-                            index === 1 ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white" :
-                            index === 2 ? "bg-gradient-to-br from-amber-600 to-amber-800 text-white" :
-                            "bg-brown-800 text-brown-300 border border-brown-700"
-                          )}>
-                            {index + 1}
-                          </div>
-                          <div className="space-y-1">
-                            <div className="font-black text-brown-50 text-lg leading-none tracking-tight">{s.regu.nama}</div>
-                            <div className="text-[10px] text-brown-400 font-bold uppercase tracking-widest">{s.regu.pangkalan}</div>
-                            <div className="pt-2">
-                              <span className="px-3 py-1 rounded-full bg-brown-800 text-brown-300 text-[9px] font-black uppercase tracking-widest border border-brown-700">
-                                {s.regu.kategori}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right flex flex-col items-end gap-3">
-                          <div className="font-black text-brown-50 text-2xl tabular-nums leading-none tracking-tighter">
-                            {s.totalScore.toLocaleString()}
-                          </div>
-                          <div className={cn(
-                            "p-2 rounded-full transition-all duration-300",
-                            expandedRegu === s.regu.id ? "bg-brown-600 text-white rotate-180" : "bg-brown-800 text-brown-400"
-                          )}>
-                            <ChevronDown className="h-4 w-4" />
-                          </div>
-                        </div>
-                      </div>
-
-                      {expandedRegu === s.regu.id && (
-                        <div className="pt-6 grid grid-cols-1 gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
-                          {lombas.map(l => (
-                            <div key={l.id} className="flex justify-between items-center p-5 bg-brown-950/40 rounded-3xl border border-brown-800">
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[9px] text-brown-400 uppercase font-black tracking-widest">Hari {l.hari}</span>
-                                <span className="text-xs font-black text-brown-50 leading-tight">{l.nama}</span>
-                              </div>
-                              <div className="flex flex-col items-end gap-1">
-                                <span className="font-black text-brown-50 text-xl tabular-nums leading-none">
-                                  {s.lombaScores[l.id] || 0}
-                                </span>
-                                <span className="text-[8px] font-bold text-brown-400 uppercase">Score</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                return (
+                  <div key={cat.id} className="space-y-8">
+                    <div className="flex items-center gap-6 px-4">
+                      <div className="h-1 w-12 bg-black rounded-full"></div>
+                      <h3 className="text-xl sm:text-2xl font-black text-black uppercase tracking-tight">{cat.label}</h3>
+                      <div className="h-px flex-grow bg-gray-100"></div>
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest bg-gray-50 px-4 py-2 rounded-full border border-gray-100">
+                        {grid.length - 1} Regu
+                      </span>
                     </div>
-                  ))}
-                </div>
-
-                {filteredSummaries.length === 0 && (
-                  <div className="py-20 text-center space-y-3">
-                    <div className="bg-brown-50 h-16 w-16 rounded-full flex items-center justify-center mx-auto">
-                      <Search className="h-8 w-8 text-brown-200" />
-                    </div>
-                    <p className="text-brown-400 font-bold italic text-sm tracking-wide">
-                      Tidak ada data regu ditemukan.
-                    </p>
+                    
+                    <RekapTable grid={grid} />
                   </div>
-                )}
-              </div>
+                );
+              })}
+
+              {Object.keys(rekapData).length === 0 && (
+                <div className="py-32 text-center space-y-6">
+                  <div className="bg-gray-50 h-24 w-24 rounded-full flex items-center justify-center mx-auto border border-gray-100">
+                    <FileSpreadsheet className="h-12 w-12 text-gray-200" />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-black font-black uppercase tracking-[0.25em] text-sm">Belum Ada Rekap Nilai</p>
+                    <p className="text-gray-400 text-xs font-medium">Panitia sedang memproses hasil penilaian.</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         : activeMainTab === 'drive' ?
           /* Google Drive Section */
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
             <div className="space-y-1">
-              <h2 className="text-[clamp(8px,3.5vw,24px)] sm:text-xl md:text-2xl font-black text-brown-50 tracking-tighter uppercase whitespace-nowrap">
-                Juknis <span className="text-brown-500">LT2 Jatinagara</span>
+              <h2 className="text-[clamp(8px,3.5vw,24px)] sm:text-xl md:text-2xl font-black text-black tracking-tighter uppercase whitespace-nowrap">
+                Dokumen <span className="text-gray-500">LT2 Jatinagara</span>
               </h2>
-              <p className="text-xs text-brown-400 font-bold uppercase tracking-[0.2em]">Konten eksternal dari Google Drive</p>
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-[0.2em]">Konten eksternal dari Google Drive</p>
             </div>
             
-            <div className="bg-brown-900/40 backdrop-blur-md rounded-[3rem] border border-brown-800 overflow-hidden shadow-2xl h-[80vh]">
+            <div className="bg-white rounded-[3rem] border border-gray-200 overflow-hidden shadow-2xl h-[80vh]">
               <iframe 
                 src="https://drive.google.com/file/d/1mp3R59AdgntQM_B0xYCDeZUi2gfvsb5H/preview" 
                 className="w-full h-full border-none"
@@ -832,7 +747,7 @@ export default function Home() {
                 href="https://drive.google.com/file/d/1mp3R59AdgntQM_B0xYCDeZUi2gfvsb5H/view?usp=sharing" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-brown-600 text-white text-xs font-black uppercase tracking-widest hover:bg-brown-500 transition-all shadow-xl shadow-brown-950/50"
+                className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-black text-white text-xs font-black uppercase tracking-widest hover:bg-gray-900 transition-all shadow-xl shadow-gray-200"
               >
                 <FileSpreadsheet className="h-4 w-4" />
                 Buka di Google Drive
@@ -843,16 +758,26 @@ export default function Home() {
           /* About Section */
           <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
             <div className="space-y-1">
-              <h2 className="text-[clamp(8px,3.5vw,24px)] sm:text-xl md:text-2xl font-black text-brown-50 tracking-tighter uppercase whitespace-nowrap">
-                Tentang <span className="text-brown-500">LT2 Kwarran Jatinagara</span>
+              <h2 className="text-[clamp(8px,3.5vw,24px)] sm:text-xl md:text-2xl font-black text-black tracking-tighter uppercase whitespace-nowrap">
+                Tentang <span className="text-gray-500">LT2 Kwarran Jatinagara</span>
               </h2>
-              <p className="text-xs text-brown-400 font-bold uppercase tracking-[0.2em]">Informasi seputar kegiatan</p>
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-[0.2em]">Informasi seputar kegiatan</p>
             </div>
 
-            <div className="bg-brown-900/40 backdrop-blur-md rounded-[3rem] border border-brown-800 overflow-hidden shadow-2xl">
-              <div className="flex flex-col md:flex-row items-stretch">
-                <div className="flex-1 p-8 sm:p-12 order-2 md:order-1">
-                  <div className="prose prose-invert max-w-none">
+            <div className="bg-white rounded-[3rem] border border-gray-200 overflow-hidden shadow-xl">
+              <div className="p-8 sm:p-12">
+                <div className="block">
+                  {(config?.aboutImage || 'https://i.imgur.com/bOD7Igj.png') && (
+                    <div className="w-full md:w-1/2 lg:w-2/5 md:float-right md:ml-8 mb-6 md:mb-4">
+                      <img 
+                        src={config?.aboutImage || 'https://i.imgur.com/bOD7Igj.png'} 
+                        alt="LT2 Kwarran Jatinagara" 
+                        className="w-full h-auto object-cover rounded-2xl shadow-lg border border-gray-100"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  )}
+                  <div className="prose max-w-none">
                     {(config?.aboutContent || `Assalamu'alaiakum Wr Wb
 Salam Pramuka
 Kakak - Kakak pembina pramuka semua dan seluruh pramuka di kwarran jatinagara dan yang berada diseluruh indonesia, kwarran Jatinagara Kwarcab Ciamis pada tahun 2026 ini akan menyelenggarakan LT2 lomba tingkat 2 pramuka penggalang. platform ini kami sediakan untuk memberikan akses informasi secara transparan mulai dari persiapan sampai pasca kegiatan. untuk itu silahkan kakak kakak update untuk mendapatkan informasi dan bersilaturahmi dengan sesama pramuka yang berada di kwarcab ciamis.
@@ -861,7 +786,7 @@ kami menyadari pasti ada kekurangan yang perlu dibenahi agar kegiatan LT2 ini da
 
 H. dadi Supriadi, S.Pd, SD
 Ketua Kwarran Jatinagara`) ? (
-                      <div className="text-brown-200 font-medium leading-relaxed whitespace-pre-wrap text-lg">
+                      <div className="text-black font-medium leading-relaxed whitespace-pre-wrap text-lg">
                         {config?.aboutContent || `Assalamu'alaiakum Wr Wb
 Salam Pramuka
 Kakak - Kakak pembina pramuka semua dan seluruh pramuka di kwarran jatinagara dan yang berada diseluruh indonesia, kwarran Jatinagara Kwarcab Ciamis pada tahun 2026 ini akan menyelenggarakan LT2 lomba tingkat 2 pramuka penggalang. platform ini kami sediakan untuk memberikan akses informasi secara transparan mulai dari persiapan sampai pasca kegiatan. untuk itu silahkan kakak kakak update untuk mendapatkan informasi dan bersilaturahmi dengan sesama pramuka yang berada di kwarcab ciamis.
@@ -872,22 +797,12 @@ H. dadi Supriadi, S.Pd, SD
 Ketua Kwarran Jatinagara`}
                       </div>
                     ) : (
-                      <div className="py-20 text-center bg-brown-950/30 rounded-3xl border border-brown-800 border-dashed">
-                        <p className="text-brown-400 font-black uppercase tracking-widest text-xs">Belum ada informasi yang ditambahkan</p>
+                      <div className="py-20 text-center bg-gray-50 rounded-3xl border border-gray-200 border-dashed">
+                        <p className="text-gray-400 font-black uppercase tracking-widest text-xs">Belum ada informasi yang ditambahkan</p>
                       </div>
                     )}
                   </div>
                 </div>
-                {(config?.aboutImage || 'https://i.imgur.com/bOD7Igj.png') && (
-                  <div className="w-full md:w-1/3 lg:w-2/5 bg-brown-950 order-1 md:order-2">
-                    <img 
-                      src={config?.aboutImage || 'https://i.imgur.com/bOD7Igj.png'} 
-                      alt="LT2 Kwarran Jatinagara" 
-                      className="w-full h-full object-cover opacity-80"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -896,14 +811,14 @@ Ketua Kwarran Jatinagara`}
 
       {/* Create Post Modal */}
       {isCreatingPost && user &&
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brown-950/80 backdrop-blur-md animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <motion.div 
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="bg-brown-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-brown-800"
+            className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-gray-200"
           >
-            <div className="px-6 py-4 border-b border-brown-800 flex items-center justify-between">
-              <h3 className="text-lg font-black text-brown-50 uppercase tracking-tight">Buat Postingan</h3>
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-lg font-black text-black uppercase tracking-tight">Buat Postingan</h3>
               <motion.button 
                 whileTap={{ scale: 0.9 }}
                 onClick={() => {
@@ -911,19 +826,19 @@ Ketua Kwarran Jatinagara`}
                   setSelectedFile(null);
                   setFilePreview(null);
                   setNewPostMediaUrl('');
-                }} className="p-2 hover:bg-brown-800 rounded-full transition-colors">
-                <ChevronDown className="h-6 w-6 text-brown-400" />
+                }} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <ChevronDown className="h-6 w-6 text-gray-400" />
               </motion.button>
             </div>
             
             <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full overflow-hidden bg-brown-800 border border-brown-700">
+                <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100 border border-gray-200">
                   {user.photoURL && <img src={user.photoURL} alt="" className="h-full w-full object-cover" />}
                 </div>
                 <div>
-                  <div className="font-black text-brown-50 text-sm">{user.displayName}</div>
-                  <div className="text-[10px] font-bold text-brown-400 uppercase tracking-widest bg-brown-800 px-2 py-0.5 rounded-full inline-block">Publik</div>
+                  <div className="font-black text-black text-sm">{user.displayName}</div>
+                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest bg-gray-100 px-2 py-0.5 rounded-full inline-block">Publik</div>
                 </div>
               </div>
 
@@ -932,12 +847,12 @@ Ketua Kwarran Jatinagara`}
                 onChange={(e) => setNewPostContent(e.target.value)}
                 placeholder={`Apa yang Anda pikirkan, ${user.displayName?.split(' ')[0]}?`}
                 rows={4}
-                className="w-full text-lg outline-none resize-none font-medium bg-transparent text-brown-50 placeholder:text-brown-600"
+                className="w-full text-lg outline-none resize-none font-medium bg-transparent text-black placeholder:text-gray-400"
                 autoFocus
               />
 
               {filePreview && (
-                <div className="relative rounded-xl overflow-hidden border border-brown-800 bg-brown-950">
+                <div className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
                   <motion.button 
                     whileTap={{ scale: 0.9 }}
                     onClick={() => {
@@ -945,7 +860,7 @@ Ketua Kwarran Jatinagara`}
                       setFilePreview(null);
                       setNewPostMediaUrl('');
                     }}
-                    className="absolute top-2 right-2 p-1.5 bg-brown-950/50 hover:bg-brown-950 text-white rounded-full transition-all z-10"
+                    className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black text-white rounded-full transition-all z-10"
                   >
                     <ChevronDown className="h-4 w-4 rotate-180" />
                   </motion.button>
@@ -957,20 +872,20 @@ Ketua Kwarran Jatinagara`}
                 </div>
               )}
 
-              <div className="space-y-3 p-4 border border-brown-800 rounded-xl bg-brown-950/30">
+              <div className="space-y-3 p-4 border border-gray-200 rounded-xl bg-gray-50/50">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-brown-400 uppercase tracking-widest">Tambahkan ke Postingan</span>
+                  <span className="text-xs font-black text-gray-400 uppercase tracking-widest">Tambahkan ke Postingan</span>
                   <div className="flex gap-2">
                     <motion.label 
                       whileTap={{ scale: 0.9 }}
-                      className="p-2 rounded-lg transition-colors hover:bg-brown-800 text-emerald-500 cursor-pointer"
+                      className="p-2 rounded-lg transition-colors hover:bg-gray-100 text-emerald-500 cursor-pointer"
                     >
                       <ImageIcon className="h-5 w-5" />
                       <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
                     </motion.label>
                     <motion.label 
                       whileTap={{ scale: 0.9 }}
-                      className="p-2 rounded-lg transition-colors hover:bg-brown-800 text-red-500 cursor-pointer"
+                      className="p-2 rounded-lg transition-colors hover:bg-gray-100 text-red-500 cursor-pointer"
                     >
                       <Play className="h-5 w-5" />
                       <input type="file" accept="video/*" className="hidden" onChange={handleFileChange} />
@@ -983,7 +898,7 @@ Ketua Kwarran Jatinagara`}
                 whileTap={{ scale: 0.98 }}
                 onClick={handleCreatePost}
                 disabled={isSubmittingPost || !newPostContent.trim()}
-                className="w-full py-3 rounded-xl bg-brown-600 text-white font-black uppercase tracking-widest hover:bg-brown-500 transition-all disabled:opacity-50 shadow-lg shadow-brown-950/20"
+                className="w-full py-3 rounded-xl bg-black text-white font-black uppercase tracking-widest hover:bg-gray-900 transition-all disabled:opacity-50 shadow-lg shadow-gray-200"
               >
                 {isSubmittingPost ? 'Memposting...' : 'Posting'}
               </motion.button>

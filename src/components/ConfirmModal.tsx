@@ -26,7 +26,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-brown-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
       <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
         <div className="px-6 pt-6 pb-4 text-center">
           <div className={cn(
@@ -37,15 +37,15 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
           )}>
             <AlertTriangle className="h-6 w-6" />
           </div>
-          <h3 className="text-lg font-black text-brown-900 mb-2">{title}</h3>
-          <p className="text-sm text-brown-500 font-medium leading-relaxed">
+          <h3 className="text-lg font-black text-black mb-2">{title}</h3>
+          <p className="text-sm text-gray-500 font-medium leading-relaxed">
             {message}
           </p>
         </div>
         <div className="px-6 pb-6 flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2.5 rounded-xl border border-brown-200 text-brown-600 text-sm font-bold hover:bg-brown-50 transition-colors"
+            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-bold hover:bg-gray-50 transition-colors"
           >
             {cancelLabel}
           </button>

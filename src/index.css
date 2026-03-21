@@ -2,22 +2,10 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  
-  --color-brown-50: #fbf8f6;
-  --color-brown-100: #f2e9e4;
-  --color-brown-200: #e5d5cc;
-  --color-brown-300: #d4bbae;
-  --color-brown-400: #bf9a86;
-  --color-brown-500: #a97c64;
-  --color-brown-600: #966651;
-  --color-brown-700: #7d5242;
-  --color-brown-800: #684539;
-  --color-brown-900: #563b31;
-  --color-brown-950: #2e1e1a;
 }
 
 body {
-  @apply bg-gradient-to-br from-brown-950 via-brown-900 to-brown-950 text-brown-50 min-h-screen;
+  @apply bg-white text-black min-h-screen;
 }
 
 @layer utilities {
@@ -29,11 +17,11 @@ body {
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #a97c64;
+    background: #d1d5db;
     border-radius: 10px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #966651;
+    background: #9ca3af;
   }
 
   .animate-spin-slow {

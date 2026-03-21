@@ -5,7 +5,9 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Save, Users, Trophy, ClipboardList, AlertCircle, Download, Upload, FileSpreadsheet, Lock, Unlock, Newspaper, Trash2, Settings, Play } from 'lucide-react';
 import { cn } from '../lib/utils';
 import * as XLSX from 'xlsx';
-import { AppConfig } from '../types';
+import { AppConfig, RekapNilai } from '../types';
+import Spreadsheet from "react-spreadsheet";
+import { Parser } from 'hot-formula-parser';
 import ConfirmModal from '../components/ConfirmModal';
 
 export default function AdminDashboard() {
@@ -14,7 +16,11 @@ export default function AdminDashboard() {
   const [nilais, setNilais] = useState<Nilai[]>([]);
   const [berita, setBerita] = useState<Berita[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [activeTab, setActiveTab] = useState<'regu' | 'lomba' | 'nilai' | 'berita' | 'settings'>('nilai');
+  const [activeTab, setActiveTab] = useState<'nilai' | 'berita' | 'settings'>('nilai');
+  const [spreadsheetData, setSpreadsheetData] = useState<any[][]>([
+    [{ value: "NO" }, { value: "NAMA REGU" }, { value: "LOMBA 1" }, { value: "LOMBA 2" }, { value: "TOTAL" }],
+    [{ value: 1 }, { value: "Regu Elang" }, { value: 0 }, { value: 0 }, { value: "=C2+D2" }],
+  ]);
   const [selectedKategori, setSelectedKategori] = useState<Kategori>('SD Putra');
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -111,8 +117,17 @@ Ketua Kwarran Jatinagara`
       handleFirestoreError(error, OperationType.GET, 'settings/global');
     });
 
-    return () => { unsubRegu(); unsubLomba(); unsubNilai(); unsubBerita(); unsubConfig(); };
-  }, [navigate]);
+    const unsubRekap = onSnapshot(doc(db, 'settings', `rekap_${selectedKategori.replace(' ', '_')}`), (s) => {
+      if (s.exists()) {
+        const data = s.data() as RekapNilai;
+        if (data.grid) {
+          setSpreadsheetData(data.grid);
+        }
+      }
+    });
+
+    return () => { unsubRegu(); unsubLomba(); unsubNilai(); unsubBerita(); unsubConfig(); unsubRekap(); };
+  }, [navigate, selectedKategori]);
 
   const isCurrentCategoryLocked = config?.lockedCategories?.[selectedKategori] || false;
 
@@ -134,6 +149,76 @@ Ketua Kwarran Jatinagara`
     const regu = regus.find(r => r.id === n.reguId);
     return regu?.kategori === selectedKategori;
   });
+
+  const handleSaveSpreadsheet = async () => {
+    try {
+      await setDoc(doc(db, 'settings', `rekap_${selectedKategori.replace(' ', '_')}`), {
+        grid: spreadsheetData,
+        updatedAt: serverTimestamp()
+      });
+      alert('Rekap Nilai Berhasil Disimpan!');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'rekap_nilai');
+    }
+  };
+
+  const formulaParser = new Parser();
+  formulaParser.on('callCellValue', (cellCoord, done) => {
+    const { row, column } = cellCoord;
+    const cell = spreadsheetData[row.index]?.[column.index];
+    let value = cell?.value;
+    if (typeof value === 'string' && value.startsWith('=')) {
+      const result = formulaParser.parse(value.substring(1));
+      done(result.error ? 0 : result.result);
+    } else {
+      done(Number(value) || 0);
+    }
+  });
+
+  const evaluateGrid = (grid: any[][]) => {
+    return grid.map((row, rIdx) => 
+      row.map((cell, cIdx) => {
+        if (typeof cell.value === 'string' && cell.value.startsWith('=')) {
+          const result = formulaParser.parse(cell.value.substring(1));
+          return { ...cell, displayValue: result.error ? '#ERR' : result.result };
+        }
+        return cell;
+      })
+    );
+  };
+
+  const handleSpreadsheetChange = (newData: any) => {
+    setSpreadsheetData(newData);
+  };
+
+  const addRow = () => {
+    const newRow = Array(spreadsheetData[0].length).fill({ value: "" });
+    setSpreadsheetData([...spreadsheetData, newRow]);
+  };
+
+  const addColumn = () => {
+    setSpreadsheetData(spreadsheetData.map(row => [...row, { value: "" }]));
+  };
+
+  const handleImportExcelToSpreadsheet = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const bstr = evt.target?.result;
+      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      
+      const newGrid = (data as any[][]).map(row => 
+        row.map(cell => ({ value: cell }))
+      );
+      setSpreadsheetData(newGrid);
+    };
+    reader.readAsBinaryString(file);
+  };
 
   const downloadTemplate = (type: 'regu' | 'lomba' | 'nilai') => {
     let data: any[] = [];
@@ -310,39 +395,37 @@ Ketua Kwarran Jatinagara`
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-16 space-y-10 sm:space-y-20">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8 border-b border-brown-100 pb-10">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8 border-b border-gray-100 pb-10">
         <div className="space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brown-50 text-brown-600 text-[10px] font-black uppercase tracking-[0.2em] border border-brown-100">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-50 text-gray-600 text-[10px] font-black uppercase tracking-[0.2em] border border-gray-100">
             Admin Control Panel
           </div>
-          <h1 className="text-4xl sm:text-6xl font-black text-brown-900 uppercase tracking-tighter leading-[0.85]">
-            Dashboard <br className="hidden sm:block" /> <span className="text-brown-500">Panitia</span>
+          <h1 className="text-4xl sm:text-6xl font-black text-black uppercase tracking-tighter leading-[0.85]">
+            Dashboard <br className="hidden sm:block" /> <span className="text-gray-600">Panitia</span>
           </h1>
-          <p className="text-sm sm:text-lg text-brown-600 font-medium max-w-md leading-relaxed">
+          <p className="text-sm sm:text-lg text-gray-600 font-medium max-w-md leading-relaxed">
             Pusat kendali rekapitulasi nilai, manajemen regu, dan pengaturan mata lomba LT2 Jatinagara.
           </p>
         </div>
         
         <div className="w-full lg:w-auto">
-          <div className="flex bg-brown-50 p-1.5 rounded-[2rem] border border-brown-100 shadow-inner w-full sm:w-max overflow-x-auto custom-scrollbar">
-            {(['nilai', 'regu', 'lomba', 'berita', 'settings'] as const).map((tab) => (
+          <div className="flex bg-gray-50 p-1.5 rounded-[2rem] border border-gray-100 shadow-inner w-full sm:w-max overflow-x-auto custom-scrollbar">
+            {(['nilai', 'berita', 'settings'] as const).map((tab) => (
               <button 
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={cn(
                   "flex-1 sm:flex-none px-6 py-3.5 rounded-[1.5rem] text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 whitespace-nowrap", 
                   activeTab === tab 
-                    ? "bg-white text-brown-900 shadow-xl shadow-brown-200/50 scale-[1.02]" 
-                    : "text-brown-400 hover:text-brown-600 hover:bg-white/50"
+                    ? "bg-white text-black shadow-xl shadow-gray-200/50 scale-[1.02]" 
+                    : "text-gray-400 hover:text-gray-600 hover:bg-white/50"
                 )}
               >
                 {tab === 'nilai' && <ClipboardList className="h-4 w-4" />}
-                {tab === 'regu' && <Users className="h-4 w-4" />}
-                {tab === 'lomba' && <Trophy className="h-4 w-4" />}
                 {tab === 'berita' && <Newspaper className="h-4 w-4" />}
                 {tab === 'settings' && <Settings className="h-4 w-4" />}
                 <span className="hidden sm:inline">
-                  {tab === 'nilai' ? 'Input Nilai' : tab === 'regu' ? 'Data Regu' : tab === 'lomba' ? 'Data Lomba' : tab === 'berita' ? 'Berita' : 'Settings'}
+                  {tab === 'nilai' ? 'Input Nilai' : tab === 'berita' ? 'Berita' : 'Settings'}
                 </span>
                 <span className="sm:hidden uppercase">{tab}</span>
               </button>
@@ -351,104 +434,66 @@ Ketua Kwarran Jatinagara`
         </div>
       </div>
 
-      {/* Category Selection & Lock Toggle */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
-        <div className="overflow-x-auto pb-4 md:pb-0 custom-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
-          <div className="flex gap-3 min-w-max">
-            {(['SD Putra', 'SD Putri', 'SMP Putra', 'SMP Putri'] as Kategori[]).map((kat) => (
-              <button
-                key={kat}
-                onClick={() => setSelectedKategori(kat)}
-                className={cn(
-                  "px-8 py-3 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-[0.15em] transition-all border-2",
-                  selectedKategori === kat 
-                    ? "bg-brown-900 text-white border-brown-900 shadow-2xl shadow-brown-300" 
-                    : "bg-white text-brown-500 border-brown-100 hover:border-brown-300 hover:text-brown-700"
-                )}
-              >
-                {kat}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <button
-          onClick={toggleLock}
-          className={cn(
-            "flex items-center justify-center gap-3 px-10 py-4 rounded-full text-xs font-black uppercase tracking-[0.2em] transition-all border-2 shadow-sm group",
-            isCurrentCategoryLocked 
-              ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100" 
-              : "bg-brown-50 text-brown-600 border-brown-200 hover:bg-brown-100"
-          )}
-        >
-          {isCurrentCategoryLocked ? (
-            <><Lock className="h-4 w-4 group-hover:scale-110 transition-transform" /> Data Terkunci</>
-          ) : (
-            <><Unlock className="h-4 w-4 group-hover:scale-110 transition-transform" /> Data Terbuka</>
-          )}
-        </button>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16">
         {/* Control Column */}
         <div className="lg:col-span-4">
           {activeTab === 'settings' ? (
-            <div className="bg-[#151619] p-8 sm:p-10 rounded-[3rem] shadow-2xl border border-white/5 sticky top-28 overflow-hidden">
+            <div className="bg-white p-8 sm:p-10 rounded-[3rem] shadow-2xl border border-gray-100 sticky top-28 overflow-hidden">
               <div className="space-y-8">
                 <div className="flex items-center gap-4">
-                  <div className="bg-brown-500/10 p-3 rounded-2xl border border-brown-500/20">
-                    <Settings className="h-7 w-7 text-brown-400" />
+                  <div className="bg-gray-100 p-3 rounded-2xl border border-gray-200">
+                    <Settings className="h-7 w-7 text-gray-600" />
                   </div>
-                  <h3 className="text-2xl font-black text-white uppercase tracking-tight">Global Settings</h3>
+                  <h3 className="text-2xl font-black text-black uppercase tracking-tight">Global Settings</h3>
                 </div>
                 
                 <div className="space-y-4">
-                  <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest">Running Text (Marquee)</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Running Text (Marquee)</label>
                   <textarea 
                     value={marqueeText}
                     onChange={(e) => setMarqueeText(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-sm outline-none focus:border-brown-500 transition-all"
+                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
                     rows={4}
                     placeholder="Masukkan teks berjalan..."
                   />
                 </div>
 
                 <div className="space-y-4">
-                  <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest">Email Panitia (Pisahkan dengan koma)</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Email Panitia (Pisahkan dengan koma)</label>
                   <textarea 
                     value={adminEmails}
                     onChange={(e) => setAdminEmails(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-sm outline-none focus:border-brown-500 transition-all"
+                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
                     rows={3}
                     placeholder="email1@gmail.com, email2@gmail.com"
                   />
-                  <p className="text-[9px] text-white/30 font-medium italic">Akun ini akan memiliki akses penuh ke Dashboard Admin.</p>
+                  <p className="text-[9px] text-gray-400 font-medium italic">Akun ini akan memiliki akses penuh ke Dashboard Admin.</p>
                 </div>
 
                 <button 
                   onClick={handleUpdateMarquee}
-                  className="w-full py-4 bg-brown-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-brown-500 transition-all"
+                  className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-900 transition-all"
                 >
                   Simpan Settings
                 </button>
 
-                <div className="space-y-4 pt-4 border-t border-white/10">
-                  <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest">Tentang LT2 (Gambar URL)</label>
+                <div className="space-y-4 pt-4 border-t border-gray-100">
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Tentang LT2 (Gambar URL)</label>
                   <input 
                     type="text"
                     value={aboutImage}
                     onChange={(e) => setAboutImage(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-sm outline-none focus:border-brown-500 transition-all"
+                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
                     placeholder="https://..."
                   />
                 </div>
 
                 <div className="space-y-4">
-                  <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest">Tentang LT2 (Artikel)</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Tentang LT2 (Artikel)</label>
                   <textarea 
                     value={aboutContent}
                     onChange={(e) => setAboutContent(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-sm outline-none focus:border-brown-500 transition-all"
+                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
                     rows={8}
                     placeholder="Tulis artikel tentang LT2..."
                   />
@@ -456,34 +501,34 @@ Ketua Kwarran Jatinagara`
               </div>
             </div>
           ) : activeTab === 'berita' ? (
-            <div className="bg-[#151619] p-8 sm:p-10 rounded-[3rem] shadow-2xl border border-white/5 sticky top-28 overflow-hidden">
+            <div className="bg-white p-8 sm:p-10 rounded-[3rem] shadow-2xl border border-gray-100 sticky top-28 overflow-hidden">
               <form onSubmit={handleAddNews} className="space-y-8">
                 <div className="flex items-center gap-4">
-                  <div className="bg-brown-500/10 p-3 rounded-2xl border border-brown-500/20">
-                    <Newspaper className="h-7 w-7 text-brown-400" />
+                  <div className="bg-gray-100 p-3 rounded-2xl border border-gray-200">
+                    <Newspaper className="h-7 w-7 text-gray-600" />
                   </div>
-                  <h3 className="text-2xl font-black text-white uppercase tracking-tight">Post Berita</h3>
+                  <h3 className="text-2xl font-black text-black uppercase tracking-tight">Post Berita</h3>
                 </div>
 
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest">Judul Berita</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Judul Berita</label>
                     <input 
                       type="text"
                       value={newsTitle}
                       onChange={(e) => setNewsTitle(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-sm outline-none focus:border-brown-500 transition-all"
+                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
                       placeholder="Judul..."
                       required
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest">Konten / Artikel</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Konten / Artikel</label>
                     <textarea 
                       value={newsContent}
                       onChange={(e) => setNewsContent(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-sm outline-none focus:border-brown-500 transition-all"
+                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
                       rows={4}
                       placeholder="Tulis artikel..."
                       required
@@ -491,12 +536,12 @@ Ketua Kwarran Jatinagara`
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-white/40 uppercase tracking-widest">Media URL (Img/Vid)</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Media URL (Img/Vid)</label>
                     <input 
                       type="text"
                       value={newsMediaUrl}
                       onChange={(e) => setNewsMediaUrl(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-sm outline-none focus:border-brown-500 transition-all"
+                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
                       placeholder="https://..."
                     />
                   </div>
@@ -509,7 +554,7 @@ Ketua Kwarran Jatinagara`
                         onClick={() => setNewsMediaType(type)}
                         className={cn(
                           "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
-                          newsMediaType === type ? "bg-brown-600 border-brown-600 text-white" : "border-white/10 text-white/40 hover:border-white/20"
+                          newsMediaType === type ? "bg-black border-black text-white" : "border-gray-200 text-gray-400 hover:border-black"
                         )}
                       >
                         {type}
@@ -519,7 +564,7 @@ Ketua Kwarran Jatinagara`
 
                   <button 
                     type="submit"
-                    className="w-full py-4 bg-white text-brown-900 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-brown-50 transition-all"
+                    className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-900 transition-all"
                   >
                     Publish Berita
                   </button>
@@ -527,41 +572,41 @@ Ketua Kwarran Jatinagara`
               </form>
             </div>
           ) : (
-            <div className="bg-[#151619] p-8 sm:p-10 rounded-[3rem] shadow-2xl border border-white/5 sticky top-28 overflow-hidden group">
+            <div className="bg-white p-8 sm:p-10 rounded-[3rem] shadow-2xl border border-gray-100 sticky top-28 overflow-hidden group">
             {/* Hardware-style decorative elements */}
-            <div className="absolute top-0 right-0 p-6 opacity-10">
-              <div className="w-20 h-20 border-2 border-dashed border-white rounded-full animate-spin-slow"></div>
+            <div className="absolute top-0 right-0 p-6 opacity-5">
+              <div className="w-20 h-20 border-2 border-dashed border-black rounded-full animate-spin-slow"></div>
             </div>
             
             <div className="relative space-y-10">
               <div className="space-y-6">
                 <div className="flex items-center gap-4">
-                  <div className="bg-brown-500/10 p-3 rounded-2xl border border-brown-500/20">
-                    <FileSpreadsheet className="h-7 w-7 text-brown-400" />
+                  <div className="bg-gray-100 p-3 rounded-2xl border border-gray-200">
+                    <FileSpreadsheet className="h-7 w-7 text-gray-600" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black text-white leading-tight uppercase tracking-tight">
+                    <h3 className="text-2xl font-black text-black leading-tight uppercase tracking-tight">
                       {activeTab === 'regu' ? 'Regu Manager' : activeTab === 'lomba' ? 'Lomba Manager' : 'Nilai Entry'}
                     </h3>
                     <div className="flex items-center gap-2 mt-1">
                       <div className={cn("w-2 h-2 rounded-full animate-pulse", isCurrentCategoryLocked ? "bg-red-500" : "bg-emerald-500")}></div>
-                      <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">System {isCurrentCategoryLocked ? 'Locked' : 'Active'}</span>
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">System {isCurrentCategoryLocked ? 'Locked' : 'Active'}</span>
                     </div>
                   </div>
                 </div>
                 
-                <p className="text-sm text-white/60 font-medium leading-relaxed">
+                <p className="text-sm text-gray-600 font-medium leading-relaxed">
                   Gunakan template Excel untuk melakukan import data {activeTab === 'regu' ? 'regu' : activeTab === 'lomba' ? 'lomba' : 'nilai'} secara massal ke dalam sistem.
                 </p>
                 
                 <div className="space-y-8 pt-4">
                   <div className="relative pl-10 group/step">
-                    <div className="absolute left-0 top-0 w-7 h-7 rounded-lg bg-white/5 border border-white/10 text-white/40 text-[10px] flex items-center justify-center font-black group-hover/step:bg-brown-500 group-hover/step:text-white transition-all">01</div>
+                    <div className="absolute left-0 top-0 w-7 h-7 rounded-lg bg-gray-50 border border-gray-100 text-gray-400 text-[10px] flex items-center justify-center font-black group-hover/step:bg-black group-hover/step:text-white transition-all">01</div>
                     <div className="space-y-4">
-                      <p className="text-xs font-black text-white uppercase tracking-widest">Unduh Template</p>
+                      <p className="text-xs font-black text-black uppercase tracking-widest">Unduh Template</p>
                       <button 
                         onClick={() => downloadTemplate(activeTab)}
-                        className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white/5 border border-white/10 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-white/10 hover:border-white/20 transition-all shadow-xl"
+                        className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gray-50 border border-gray-100 text-black rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-gray-100 hover:border-gray-200 transition-all shadow-xl"
                       >
                         <Download className="h-4 w-4" /> Download .XLSX
                       </button>
@@ -569,22 +614,22 @@ Ketua Kwarran Jatinagara`
                   </div>
 
                   <div className="relative pl-10 group/step">
-                    <div className="absolute left-0 top-0 w-7 h-7 rounded-lg bg-white/5 border border-white/10 text-white/40 text-[10px] flex items-center justify-center font-black group-hover/step:bg-brown-500 group-hover/step:text-white transition-all">02</div>
+                    <div className="absolute left-0 top-0 w-7 h-7 rounded-lg bg-gray-50 border border-gray-100 text-gray-400 text-[10px] flex items-center justify-center font-black group-hover/step:bg-black group-hover/step:text-white transition-all">02</div>
                     <div className="space-y-2">
-                      <p className="text-xs font-black text-white uppercase tracking-widest">Data Preparation</p>
-                      <p className="text-[11px] text-white/40 font-medium leading-relaxed">Lengkapi semua kolom wajib pada file template yang telah diunduh.</p>
+                      <p className="text-xs font-black text-black uppercase tracking-widest">Data Preparation</p>
+                      <p className="text-[11px] text-gray-400 font-medium leading-relaxed">Lengkapi semua kolom wajib pada file template yang telah diunduh.</p>
                     </div>
                   </div>
 
                   <div className="relative pl-10 group/step">
-                    <div className="absolute left-0 top-0 w-7 h-7 rounded-lg bg-white/5 border border-white/10 text-white/40 text-[10px] flex items-center justify-center font-black group-hover/step:bg-brown-500 group-hover/step:text-white transition-all">03</div>
+                    <div className="absolute left-0 top-0 w-7 h-7 rounded-lg bg-gray-50 border border-gray-100 text-gray-400 text-[10px] flex items-center justify-center font-black group-hover/step:bg-black group-hover/step:text-white transition-all">03</div>
                     <div className="space-y-4">
-                      <p className="text-xs font-black text-white uppercase tracking-widest">Upload & Sync</p>
+                      <p className="text-xs font-black text-black uppercase tracking-widest">Upload & Sync</p>
                       <label className={cn(
                         "w-full inline-flex items-center justify-center gap-3 px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all cursor-pointer shadow-2xl",
                         isCurrentCategoryLocked 
-                          ? "bg-white/5 text-white/20 cursor-not-allowed border border-white/5" 
-                          : "bg-brown-600 text-white hover:bg-brown-500 shadow-brown-900/50"
+                          ? "bg-gray-50 text-gray-300 cursor-not-allowed border border-gray-100" 
+                          : "bg-black text-white hover:bg-gray-900 shadow-gray-200"
                       )}>
                         <Upload className="h-4 w-4" /> Import Data
                         <input 
@@ -601,7 +646,7 @@ Ketua Kwarran Jatinagara`
               </div>
 
               {isCurrentCategoryLocked && (
-                <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-2xl flex gap-4 text-[11px] text-red-400 font-bold uppercase tracking-wider leading-relaxed">
+                <div className="p-5 bg-red-50 border border-red-100 rounded-2xl flex gap-4 text-[11px] text-red-500 font-bold uppercase tracking-wider leading-relaxed">
                   <AlertCircle className="h-5 w-5 flex-shrink-0" />
                   <span>Access Denied: Buka kunci kategori untuk memodifikasi data.</span>
                 </div>
@@ -616,11 +661,11 @@ Ketua Kwarran Jatinagara`
           {activeTab === 'berita' ? (
             <div className="space-y-6">
               {berita.map((item) => (
-                <div key={item.id} className="bg-white rounded-[2.5rem] border border-brown-100 p-8 flex gap-6 items-start group">
+                <div key={item.id} className="bg-white rounded-[2.5rem] border border-gray-100 p-8 flex gap-6 items-start group">
                   {item.mediaUrl && (
-                    <div className="h-24 w-24 rounded-2xl overflow-hidden flex-shrink-0 bg-brown-50">
+                    <div className="h-24 w-24 rounded-2xl overflow-hidden flex-shrink-0 bg-gray-50">
                       {item.mediaType === 'video' ? (
-                        <div className="h-full w-full bg-brown-900 flex items-center justify-center text-white">
+                        <div className="h-full w-full bg-black flex items-center justify-center text-white">
                           <Play className="h-6 w-6" />
                         </div>
                       ) : (
@@ -629,10 +674,10 @@ Ketua Kwarran Jatinagara`
                     </div>
                   )}
                   <div className="flex-grow space-y-2">
-                    <h4 className="text-xl font-black text-brown-900 leading-tight">{item.title}</h4>
-                    <p className="text-sm text-brown-500 line-clamp-2 font-medium">{item.content}</p>
+                    <h4 className="text-xl font-black text-black leading-tight">{item.title}</h4>
+                    <p className="text-sm text-gray-500 line-clamp-2 font-medium">{item.content}</p>
                     <div className="pt-2 flex items-center justify-between">
-                      <span className="text-[10px] font-black text-brown-400 uppercase tracking-widest">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
                         {item.timestamp?.toDate().toLocaleDateString('id-ID')}
                       </span>
                       <button 
@@ -648,148 +693,103 @@ Ketua Kwarran Jatinagara`
                 </div>
               ))}
               {berita.length === 0 && (
-                <div className="py-20 text-center bg-white rounded-[3rem] border border-brown-100 border-dashed">
-                  <p className="text-brown-400 font-black uppercase tracking-widest text-xs">Belum ada berita diposting</p>
+                <div className="py-20 text-center bg-white rounded-[3rem] border border-gray-100 border-dashed">
+                  <p className="text-gray-400 font-black uppercase tracking-widest text-xs">Belum ada berita diposting</p>
                 </div>
               )}
             </div>
           ) : activeTab === 'settings' ? (
-            <div className="bg-white rounded-[3rem] border border-brown-100 p-12 space-y-8">
+            <div className="bg-white rounded-[3rem] border border-gray-100 p-12 space-y-8">
               <div className="space-y-2">
-                <h3 className="text-2xl font-black text-brown-900 uppercase tracking-tight">System Overview</h3>
-                <p className="text-sm text-brown-500 font-medium">Konfigurasi global untuk portal LT2 Jatinagara.</p>
+                <h3 className="text-2xl font-black text-black uppercase tracking-tight">System Overview</h3>
+                <p className="text-sm text-gray-500 font-medium">Konfigurasi global untuk portal LT2 Jatinagara.</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="p-8 bg-brown-50 rounded-[2rem] border border-brown-100 space-y-4">
-                  <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-brown-600 shadow-sm">
+                <div className="p-8 bg-gray-50 rounded-[2rem] border border-gray-100 space-y-4">
+                  <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-gray-600 shadow-sm">
                     <Lock className="h-5 w-5" />
                   </div>
                   <div className="space-y-1">
-                    <p className="text-[10px] font-black text-brown-400 uppercase tracking-widest">Global Lock Status</p>
-                    <p className="text-xl font-black text-brown-900">{config?.isLocked ? 'LOCKED' : 'UNLOCKED'}</p>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Global Lock Status</p>
+                    <p className="text-xl font-black text-black">{config?.isLocked ? 'LOCKED' : 'UNLOCKED'}</p>
                   </div>
                 </div>
-                <div className="p-8 bg-brown-50 rounded-[2rem] border border-brown-100 space-y-4">
-                  <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-brown-600 shadow-sm">
+                <div className="p-8 bg-gray-50 rounded-[2rem] border border-gray-100 space-y-4">
+                  <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-gray-600 shadow-sm">
                     <Newspaper className="h-5 w-5" />
                   </div>
                   <div className="space-y-1">
-                    <p className="text-[10px] font-black text-brown-400 uppercase tracking-widest">Total News Posts</p>
-                    <p className="text-xl font-black text-brown-900">{berita.length}</p>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total News Posts</p>
+                    <p className="text-xl font-black text-black">{berita.length}</p>
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-[3rem] shadow-sm border border-brown-100 overflow-hidden">
-            <div className="p-8 sm:p-12 bg-brown-50/30 border-b border-brown-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+            <div className="bg-white rounded-[3rem] shadow-sm border border-gray-100 overflow-hidden">
+            <div className="p-8 sm:p-12 bg-gray-50/30 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
               <div className="space-y-1">
-                <h3 className="font-black text-brown-900 uppercase text-lg sm:text-xl tracking-tight">
+                <h3 className="font-black text-black uppercase text-lg sm:text-xl tracking-tight">
                   {activeTab === 'regu' ? `Database Regu` : activeTab === 'lomba' ? `Master Data Lomba` : `Log Penilaian`}
                 </h3>
-                <p className="text-xs text-brown-400 font-bold uppercase tracking-widest">Kategori: {selectedKategori}</p>
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Kategori: {selectedKategori}</p>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-[10px] font-black text-brown-600 bg-white border border-brown-100 px-5 py-2 rounded-full shadow-sm uppercase tracking-widest">
+                <span className="text-[10px] font-black text-gray-600 bg-white border border-gray-100 px-5 py-2 rounded-full shadow-sm uppercase tracking-widest">
                   {activeTab === 'regu' ? filteredRegus.length : activeTab === 'lomba' ? filteredLombas.length : filteredNilais.length} Records
                 </span>
               </div>
             </div>
             
-            <div className="max-h-[800px] overflow-y-auto custom-scrollbar">
-              {activeTab === 'regu' && (
-                <div className="divide-y divide-brown-50">
-                  {filteredRegus.map((r, i) => (
-                    <div key={r.id} className="p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 hover:bg-brown-50/50 transition-all group">
-                      <div className="flex items-start gap-6">
-                        <div className="text-4xl font-black text-brown-100 group-hover:text-brown-200 transition-colors tabular-nums">
-                          {(i + 1).toString().padStart(2, '0')}
-                        </div>
-                        <div className="space-y-1">
-                          <div className="font-black text-brown-900 text-xl group-hover:text-brown-700 transition-colors flex items-center gap-3">
-                            {r.nama} 
-                            <span className="text-[10px] px-2 py-0.5 bg-brown-900 text-white rounded-md font-black">#{r.nomorTenda}</span>
-                          </div>
-                          <div className="text-xs sm:text-sm text-brown-500 font-medium flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {r.pangkalan}</span>
-                            <span className="w-1 h-1 rounded-full bg-brown-200"></span>
-                            <span>Pinru: <span className="text-brown-700 font-bold">{r.pinru || '-'}</span></span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex sm:flex-col items-center sm:items-end gap-2">
-                        <span className="text-[10px] font-black uppercase px-4 py-2 bg-brown-50 text-brown-500 rounded-full tracking-[0.2em] border border-brown-100">
-                          {r.kategori}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="flex flex-col gap-4">
+              <div className="flex gap-3">
+                {(['SD Putra', 'SD Putri', 'SMP Putra', 'SMP Putri'] as Kategori[]).map((kat) => (
+                  <button
+                    key={kat}
+                    onClick={() => setSelectedKategori(kat)}
+                    className={cn(
+                      "px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border",
+                      selectedKategori === kat 
+                        ? "bg-black text-white border-black" 
+                        : "bg-white text-gray-500 border-gray-100 hover:border-gray-300"
+                    )}
+                  >
+                    {kat}
+                  </button>
+                ))}
+              </div>
 
-              {activeTab === 'lomba' && (
-                <div className="divide-y divide-brown-50">
-                  {filteredLombas.map((l, i) => (
-                    <div key={l.id} className="p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 hover:bg-brown-50/50 transition-all group">
-                      <div className="flex items-start gap-6">
-                        <div className="text-4xl font-black text-brown-100 group-hover:text-brown-200 transition-colors tabular-nums">
-                          {(i + 1).toString().padStart(2, '0')}
-                        </div>
-                        <div className="space-y-1">
-                          <div className="font-black text-brown-900 text-xl group-hover:text-brown-700 transition-colors uppercase tracking-tight">{l.nama}</div>
-                          <div className="text-xs text-brown-400 font-black uppercase tracking-[0.2em]">{l.bidangLomba}</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-2xl bg-brown-900 text-white flex flex-col items-center justify-center shadow-lg shadow-brown-200">
-                          <span className="text-[8px] font-black uppercase leading-none opacity-60">Hari</span>
-                          <span className="text-lg font-black leading-none mt-1">{l.hari}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {activeTab === 'nilai' && (
-                <div className="divide-y divide-brown-50">
-                  {filteredNilais.slice(0, 100).map((n, i) => {
-                    const regu = regus.find(r => r.id === n.reguId);
-                    const lomba = lombas.find(l => l.id === n.lombaId);
-                    return (
-                      <div key={n.id} className="p-8 flex items-center justify-between gap-6 hover:bg-brown-50/50 transition-all group">
-                        <div className="flex items-start gap-6">
-                          <div className="text-4xl font-black text-brown-100 group-hover:text-brown-200 transition-colors tabular-nums">
-                            {(i + 1).toString().padStart(2, '0')}
-                          </div>
-                          <div className="space-y-1">
-                            <span className="font-black text-brown-900 text-lg sm:text-xl group-hover:text-brown-700 transition-colors block">{regu?.nama || 'Unknown Regu'}</span>
-                            <span className="text-xs text-brown-400 font-bold uppercase tracking-widest block">{lomba?.nama || 'Unknown Lomba'}</span>
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <div className="text-3xl sm:text-5xl font-black text-brown-800 tabular-nums tracking-tighter">
-                            {n.score}
-                          </div>
-                          <div className="text-[9px] font-black text-brown-400 uppercase tracking-widest">Final Score</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              
-              {(activeTab === 'regu' ? filteredRegus : activeTab === 'lomba' ? filteredLombas : filteredNilais).length === 0 && (
-                <div className="py-32 text-center space-y-6">
-                  <div className="bg-brown-50 h-24 w-24 rounded-full flex items-center justify-center mx-auto border border-brown-100">
-                    <ClipboardList className="h-12 w-12 text-brown-200" />
+              <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm">
+                <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                  <div className="flex gap-2">
+                    <button onClick={addRow} className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all text-xs font-bold flex items-center gap-2">
+                      <Plus className="h-3 w-3" /> Baris
+                    </button>
+                    <button onClick={addColumn} className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all text-xs font-bold flex items-center gap-2">
+                      <Plus className="h-3 w-3" /> Kolom
+                    </button>
+                    <label className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all text-xs font-bold flex items-center gap-2 cursor-pointer">
+                      <Upload className="h-3 w-3" /> Import Excel
+                      <input type="file" className="hidden" onChange={handleImportExcelToSpreadsheet} accept=".xlsx, .xls" />
+                    </label>
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-brown-900 font-black uppercase tracking-[0.25em] text-sm">No Records Found</p>
-                    <p className="text-brown-400 text-xs font-medium">Silakan unggah data melalui panel kontrol di sebelah kiri.</p>
-                  </div>
+                  <button 
+                    onClick={handleSaveSpreadsheet}
+                    className="px-6 py-2 bg-black text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-800 transition-all flex items-center gap-2"
+                  >
+                    <Save className="h-4 w-4" /> Simpan Rekap
+                  </button>
                 </div>
-              )}
+                <div className="overflow-auto max-h-[600px] spreadsheet-container">
+                  <Spreadsheet 
+                    data={spreadsheetData} 
+                    onChange={handleSpreadsheetChange}
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-400 font-medium italic">
+                * Gunakan "=" untuk rumus (contoh: =C2+D2). Simpan rekap untuk menampilkan di halaman depan.
+              </p>
             </div>
           </div>
         )}
