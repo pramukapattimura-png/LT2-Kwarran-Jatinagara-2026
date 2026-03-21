@@ -1,9 +1,10 @@
 {
   "projectId": "lt2-jatinagara",
-  "appId": "1:893231840975:web:85fe1977d46da7b03301ba",
+  "appId": "1:893231840975:web:9abebe40c5e4eca83301ba",
   "apiKey": "AIzaSyC845nXSKqsaDa8ULdez6GmknqDUmgVBgo",
   "authDomain": "lt2-jatinagara.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-1785cdd7-2d6d-4804-a399-82e044ce5a82",
   "storageBucket": "lt2-jatinagara.firebasestorage.app",
   "messagingSenderId": "893231840975",
-  "measurementId": "G-PGELE8LKQN"
+  "measurementId": ""
 }

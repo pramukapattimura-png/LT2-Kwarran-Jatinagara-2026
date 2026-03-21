@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { db, collection, addDoc, setDoc, doc, onSnapshot, query, orderBy, auth, serverTimestamp, deleteDoc } from '../firebase';
+import { db, collection, addDoc, setDoc, doc, onSnapshot, query, orderBy, auth, serverTimestamp, deleteDoc, handleFirestoreError, OperationType } from '../firebase';
 import { Regu, Lomba, Nilai, Kategori, Berita } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Save, Users, Trophy, ClipboardList, AlertCircle, Download, Upload, FileSpreadsheet, Lock, Unlock, Newspaper, Trash2, Settings, Play } from 'lucide-react';
@@ -43,10 +43,30 @@ export default function AdminDashboard() {
   }, [navigate]);
 
   useEffect(() => {
-    const unsubRegu = onSnapshot(collection(db, 'regu'), (s) => setRegus(s.docs.map(d => ({ id: d.id, ...d.data() } as Regu))));
-    const unsubLomba = onSnapshot(query(collection(db, 'lomba'), orderBy('hari', 'asc')), (s) => setLombas(s.docs.map(d => ({ id: d.id, ...d.data() } as Lomba))));
-    const unsubNilai = onSnapshot(collection(db, 'nilai'), (s) => setNilais(s.docs.map(d => ({ id: d.id, ...d.data() } as Nilai))));
-    const unsubBerita = onSnapshot(query(collection(db, 'berita'), orderBy('timestamp', 'desc')), (s) => setBerita(s.docs.map(d => ({ id: d.id, ...d.data() } as Berita))));
+    const unsubRegu = onSnapshot(collection(db, 'regu'), (s) => {
+      setRegus(s.docs.map(d => ({ id: d.id, ...d.data() } as Regu)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'regu');
+    });
+
+    const unsubLomba = onSnapshot(query(collection(db, 'lomba'), orderBy('hari', 'asc')), (s) => {
+      setLombas(s.docs.map(d => ({ id: d.id, ...d.data() } as Lomba)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'lomba');
+    });
+
+    const unsubNilai = onSnapshot(collection(db, 'nilai'), (s) => {
+      setNilais(s.docs.map(d => ({ id: d.id, ...d.data() } as Nilai)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'nilai');
+    });
+
+    const unsubBerita = onSnapshot(query(collection(db, 'berita'), orderBy('timestamp', 'desc')), (s) => {
+      setBerita(s.docs.map(d => ({ id: d.id, ...d.data() } as Berita)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'berita');
+    });
+
     const unsubConfig = onSnapshot(doc(db, 'settings', 'global'), (s) => {
       if (s.exists()) {
         const data = s.data() as AppConfig;
@@ -83,11 +103,16 @@ kami menyadari pasti ada kekurangan yang perlu dibenahi agar kegiatan LT2 ini da
 H. dadi Supriadi, S.Pd, SD
 Ketua Kwarran Jatinagara`
         };
-        setDoc(doc(db, 'settings', 'global'), initialConfig);
+        setDoc(doc(db, 'settings', 'global'), initialConfig).catch(error => {
+          handleFirestoreError(error, OperationType.WRITE, 'settings/global');
+        });
       }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'settings/global');
     });
+
     return () => { unsubRegu(); unsubLomba(); unsubNilai(); unsubBerita(); unsubConfig(); };
-  }, []);
+  }, [navigate]);
 
   const isCurrentCategoryLocked = config?.lockedCategories?.[selectedKategori] || false;
 

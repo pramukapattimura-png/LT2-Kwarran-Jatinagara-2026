@@ -1,24 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: regu
-    // Fields: nama (string), pangkalan (string), kategori (string)
-    //
-    // Collection: lomba
-    // Fields: nama (string), hari (number)
-    //
-    // Collection: nilai
-    // Fields: reguId (string), lombaId (string), score (number)
-    //
-    // Collection: komentar
-    // Fields: author (string), content (string), timestamp (timestamp)
-    //
-    // ===============================================================
-
     function isAuthenticated() {
       return request.auth != null;
     }

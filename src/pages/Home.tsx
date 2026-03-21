@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { db, collection, onSnapshot, query, orderBy, doc, auth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, addDoc, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteDoc } from '../firebase';
+import { db, collection, onSnapshot, query, orderBy, doc, auth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, addDoc, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteDoc, handleFirestoreError, OperationType } from '../firebase';
 import { Regu, Lomba, Nilai, Kategori, ScoreSummary, Berita, AppConfig } from '../types';
 import { Trophy, Medal, Search, Filter, ChevronRight, ChevronDown, Newspaper, Play, Image as ImageIcon, ArrowDownCircle, Heart, MessageCircle, Share2, MoreHorizontal, Trash2, LogIn, User, Info, FileSpreadsheet } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -63,11 +63,38 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const unsubRegu = onSnapshot(collection(db, 'regu'), (s) => setRegus(s.docs.map(d => ({ id: d.id, ...d.data() } as Regu))));
-    const unsubLomba = onSnapshot(query(collection(db, 'lomba'), orderBy('hari', 'asc')), (s) => setLombas(s.docs.map(d => ({ id: d.id, ...d.data() } as Lomba))));
-    const unsubNilai = onSnapshot(collection(db, 'nilai'), (s) => setNilais(s.docs.map(d => ({ id: d.id, ...d.data() } as Nilai))));
-    const unsubBerita = onSnapshot(query(collection(db, 'berita'), orderBy('timestamp', 'desc')), (s) => setBerita(s.docs.map(d => ({ id: d.id, ...d.data() } as Berita))));
-    const unsubConfig = onSnapshot(doc(db, 'settings', 'global'), (s) => s.exists() && setConfig({ id: s.id, ...s.data() } as AppConfig));
+    const unsubRegu = onSnapshot(collection(db, 'regu'), (s) => {
+      setRegus(s.docs.map(d => ({ id: d.id, ...d.data() } as Regu)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'regu');
+    });
+
+    const unsubLomba = onSnapshot(query(collection(db, 'lomba'), orderBy('hari', 'asc')), (s) => {
+      setLombas(s.docs.map(d => ({ id: d.id, ...d.data() } as Lomba)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'lomba');
+    });
+
+    const unsubNilai = onSnapshot(collection(db, 'nilai'), (s) => {
+      setNilais(s.docs.map(d => ({ id: d.id, ...d.data() } as Nilai)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'nilai');
+    });
+
+    const unsubBerita = onSnapshot(query(collection(db, 'berita'), orderBy('timestamp', 'desc')), (s) => {
+      setBerita(s.docs.map(d => ({ id: d.id, ...d.data() } as Berita)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'berita');
+    });
+
+    const unsubConfig = onSnapshot(doc(db, 'settings', 'global'), (s) => {
+      if (s.exists()) {
+        setConfig({ id: s.id, ...s.data() } as AppConfig);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'settings/global');
+    });
+
     return () => { unsubRegu(); unsubLomba(); unsubNilai(); unsubBerita(); unsubConfig(); };
   }, []);
 
@@ -97,8 +124,8 @@ export default function Home() {
     if (!file) return;
 
     // Limit size to 800KB for Firestore documents
-    if (file.size > 800 * 1024) {
-      setToast({ message: 'Ukuran file terlalu besar (maks 800KB).', type: 'error' });
+    if (file.size > 500 * 1024) {
+      setToast({ message: 'Ukuran file terlalu besar (maks 500KB).', type: 'error' });
       return;
     }
 
@@ -118,7 +145,8 @@ export default function Home() {
 
     setIsSubmittingPost(true);
     try {
-      await addDoc(collection(db, 'berita'), {
+      const path = 'berita';
+      await addDoc(collection(db, path), {
         title: '', // Title is optional now
         content: newPostContent.trim(),
         mediaUrl: newPostMediaUrl.trim(),
@@ -138,7 +166,18 @@ export default function Home() {
       setToast({ message: 'Postingan berhasil dibagikan!', type: 'success' });
     } catch (error) {
       console.error('Error creating post:', error);
-      setToast({ message: 'Gagal membuat postingan.', type: 'error' });
+      try {
+        handleFirestoreError(error, OperationType.CREATE, 'berita');
+      } catch (err: any) {
+        let errorMessage = 'Gagal membuat postingan.';
+        try {
+          const parsed = JSON.parse(err.message);
+          if (parsed.error) errorMessage = `Gagal: ${parsed.error}`;
+        } catch {
+          // Not JSON
+        }
+        setToast({ message: errorMessage, type: 'error' });
+      }
     } finally {
       setIsSubmittingPost(false);
     }
