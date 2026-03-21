@@ -334,7 +334,7 @@ export default function Home() {
           /* News Section */
           <div className="space-y-6">
             {/* Create Post Section - Prominent and accessible */}
-            <div className="sticky top-[72px] sm:top-[88px] z-30 -mx-2 px-2 pb-2 bg-brown-50/30 backdrop-blur-sm">
+            <div className="z-30 -mx-2 px-2 pb-2 bg-brown-50/30 backdrop-blur-sm">
               <div className="bg-brown-900/60 backdrop-blur-xl rounded-2xl border border-brown-800 p-3 sm:p-4 shadow-2xl space-y-4 ring-1 ring-brown-700/50">
                 <div className="flex gap-3">
                   <div className="h-10 w-10 rounded-full overflow-hidden bg-brown-800 border border-brown-700 flex-shrink-0">
@@ -603,7 +603,7 @@ export default function Home() {
         : activeMainTab === 'rekap' ?
           /* Filters & Leaderboard Section */
           <div id="leaderboard" className="scroll-mt-32 space-y-16 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <div className="sticky top-20 z-30 bg-brown-900/80 backdrop-blur-xl p-4 sm:p-6 rounded-[2.5rem] shadow-2xl shadow-brown-950/40 border border-brown-800 flex flex-col lg:flex-row gap-6 items-center justify-between">
+            <div className="bg-brown-900/80 backdrop-blur-xl p-4 sm:p-6 rounded-[2.5rem] shadow-2xl shadow-brown-950/40 border border-brown-800 flex flex-col lg:flex-row gap-6 items-center justify-between">
               <div className="overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 custom-scrollbar">
                 <div className="flex gap-2 min-w-max">
                   {categories.map(cat => (
