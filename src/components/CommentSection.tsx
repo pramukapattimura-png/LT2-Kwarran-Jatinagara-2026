@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
-import { db, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, auth, GoogleAuthProvider, signInWithPopup, deleteDoc, doc } from '../firebase';
+import { db, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, auth, GoogleAuthProvider, signInWithPopup, deleteDoc, doc, handleFirestoreError, OperationType } from '../firebase';
 import { Komentar } from '../types';
 import { MessageSquare, Send, User, LogIn, Trash2, AlertTriangle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -67,7 +67,8 @@ const CommentSection = forwardRef<CommentSectionRef, CommentSectionProps>(({ pos
 
     setLoading(true);
     try {
-      await addDoc(collection(db, 'komentar'), {
+      const path = 'komentar';
+      await addDoc(collection(db, path), {
         postId,
         author: user.displayName || 'Anonim',
         authorId: user.uid,
@@ -79,6 +80,7 @@ const CommentSection = forwardRef<CommentSectionRef, CommentSectionProps>(({ pos
       setContent('');
     } catch (error) {
       console.error('Error adding comment:', error);
+      handleFirestoreError(error, OperationType.CREATE, 'komentar');
     } finally {
       setLoading(false);
     }
@@ -86,9 +88,11 @@ const CommentSection = forwardRef<CommentSectionRef, CommentSectionProps>(({ pos
 
   const handleDelete = async (commentId: string) => {
     try {
-      await deleteDoc(doc(db, 'komentar', commentId));
+      const path = 'komentar';
+      await deleteDoc(doc(db, path, commentId));
     } catch (error) {
       console.error('Error deleting comment:', error);
+      handleFirestoreError(error, OperationType.DELETE, 'komentar');
     }
   };
 

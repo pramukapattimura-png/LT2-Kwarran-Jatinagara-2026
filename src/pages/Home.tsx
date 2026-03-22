@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { db, collection, onSnapshot, query, orderBy, doc, auth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, addDoc, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteDoc, handleFirestoreError, OperationType } from '../firebase';
+import { db, collection, onSnapshot, query, orderBy, doc, auth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, addDoc, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteDoc, handleFirestoreError, OperationType, ref, uploadBytes, getDownloadURL, storage } from '../firebase';
 import { Regu, Lomba, Nilai, Kategori, ScoreSummary, Berita, AppConfig, RekapNilai } from '../types';
 import { Trophy, Medal, Search, Filter, ChevronRight, ChevronDown, Newspaper, Play, Image as ImageIcon, ArrowDownCircle, Heart, MessageCircle, Share2, MoreHorizontal, Trash2, LogIn, User, Info, FileSpreadsheet, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -138,9 +138,9 @@ export default function Home() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Limit size to 800KB for Firestore documents
-    if (file.size > 500 * 1024) {
-      setToast({ message: 'Ukuran file terlalu besar (maks 500KB).', type: 'error' });
+    // Limit size to 10MB for Storage
+    if (file.size > 10 * 1024 * 1024) {
+      setToast({ message: 'Ukuran file terlalu besar (maks 10MB).', type: 'error' });
       return;
     }
 
@@ -148,23 +148,34 @@ export default function Home() {
     const reader = new FileReader();
     reader.onloadend = () => {
       setFilePreview(reader.result as string);
-      setNewPostMediaUrl(reader.result as string);
       setNewPostMediaType(file.type.startsWith('video') ? 'video' : 'image');
     };
     reader.readAsDataURL(file);
   };
 
   const handleCreatePost = async (e: React.FormEvent) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!user || !newPostContent.trim()) return;
 
     setIsSubmittingPost(true);
     try {
+      let mediaUrl = '';
+      
+      // Upload file to Storage if selected
+      if (selectedFile) {
+        const fileExtension = selectedFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExtension}`;
+        const storageRef = ref(storage, `berita/${user.uid}/${fileName}`);
+        
+        const uploadResult = await uploadBytes(storageRef, selectedFile);
+        mediaUrl = await getDownloadURL(uploadResult.ref);
+      }
+
       const path = 'berita';
       await addDoc(collection(db, path), {
-        title: '', // Title is optional now
+        title: '',
         content: newPostContent.trim(),
-        mediaUrl: newPostMediaUrl.trim(),
+        mediaUrl: mediaUrl,
         mediaType: newPostMediaType,
         timestamp: serverTimestamp(),
         authorId: user.uid,

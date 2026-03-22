@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { db, collection, addDoc, setDoc, doc, onSnapshot, query, orderBy, auth, serverTimestamp, deleteDoc, handleFirestoreError, OperationType } from '../firebase';
+import { db, collection, addDoc, setDoc, doc, onSnapshot, query, orderBy, auth, serverTimestamp, deleteDoc, handleFirestoreError, OperationType, ref, uploadBytes, getDownloadURL, storage } from '../firebase';
 import { Regu, Lomba, Nilai, Kategori, Berita } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Save, Users, Trophy, ClipboardList, AlertCircle, Download, Upload, FileSpreadsheet, Lock, Unlock, Newspaper, Trash2, Settings, Play } from 'lucide-react';
@@ -31,6 +31,9 @@ export default function AdminDashboard() {
   const [newsContent, setNewsContent] = useState('');
   const [newsMediaUrl, setNewsMediaUrl] = useState('');
   const [newsMediaType, setNewsMediaType] = useState<'image' | 'video'>('image');
+  const [newsFile, setNewsFile] = useState<File | null>(null);
+  const [newsFilePreview, setNewsFilePreview] = useState<string | null>(null);
+  const [isSubmittingNews, setIsSubmittingNews] = useState(false);
   const [marqueeText, setMarqueeText] = useState('');
   const [aboutContent, setAboutContent] = useState('');
   const [aboutImage, setAboutImage] = useState('');
@@ -379,25 +382,46 @@ Ketua Kwarran Jatinagara`
 
   const handleAddNews = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth.currentUser) return;
+    if (!auth.currentUser || isSubmittingNews) return;
     
-    await addDoc(collection(db, 'berita'), {
-      title: newsTitle,
-      content: newsContent,
-      mediaUrl: newsMediaUrl,
-      mediaType: newsMediaType,
-      timestamp: serverTimestamp(),
-      authorId: auth.currentUser.uid,
-      authorName: auth.currentUser.displayName || 'Admin',
-      authorEmail: auth.currentUser.email || '',
-      authorPhoto: auth.currentUser.photoURL || '',
-      likes: []
-    });
-    setNewsTitle('');
-    setNewsContent('');
-    setNewsMediaUrl('');
-    setNewsMediaType('image');
-    alert('Berita berhasil diposting!');
+    setIsSubmittingNews(true);
+    try {
+      let mediaUrl = newsMediaUrl;
+      
+      if (newsFile) {
+        const fileExtension = newsFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExtension}`;
+        const storageRef = ref(storage, `berita/admin/${fileName}`);
+        
+        const uploadResult = await uploadBytes(storageRef, newsFile);
+        mediaUrl = await getDownloadURL(uploadResult.ref);
+      }
+
+      await addDoc(collection(db, 'berita'), {
+        title: newsTitle,
+        content: newsContent,
+        mediaUrl: mediaUrl,
+        mediaType: newsMediaType,
+        timestamp: serverTimestamp(),
+        authorId: auth.currentUser.uid,
+        authorName: auth.currentUser.displayName || 'Admin',
+        authorEmail: auth.currentUser.email || '',
+        authorPhoto: auth.currentUser.photoURL || '',
+        likes: []
+      });
+      setNewsTitle('');
+      setNewsContent('');
+      setNewsMediaUrl('');
+      setNewsMediaType('image');
+      setNewsFile(null);
+      setNewsFilePreview(null);
+      alert('Berita berhasil diposting!');
+    } catch (error) {
+      console.error('Error adding news:', error);
+      alert('Gagal memposting berita.');
+    } finally {
+      setIsSubmittingNews(false);
+    }
   };
 
   const handleDeleteNews = async (id: string) => {
@@ -555,14 +579,64 @@ Ketua Kwarran Jatinagara`
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Media URL (Img/Vid)</label>
-                    <input 
-                      type="text"
-                      value={newsMediaUrl}
-                      onChange={(e) => setNewsMediaUrl(e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
-                      placeholder="https://..."
-                    />
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Media (Upload File atau URL)</label>
+                    <div className="space-y-4">
+                      <div className="flex gap-4">
+                        <label className="flex-1 flex items-center justify-center gap-2 py-4 border-2 border-dashed border-gray-200 rounded-2xl hover:border-black cursor-pointer transition-all">
+                          <Upload className="h-5 w-5 text-gray-400" />
+                          <span className="text-xs font-bold text-gray-500">Upload File</span>
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setNewsFile(file);
+                                setNewsMediaType(file.type.startsWith('video') ? 'video' : 'image');
+                                const reader = new FileReader();
+                                reader.onloadend = () => setNewsFilePreview(reader.result as string);
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                        <div className="flex-1">
+                          <input 
+                            type="text"
+                            value={newsMediaUrl}
+                            onChange={(e) => {
+                              setNewsMediaUrl(e.target.value);
+                              if (e.target.value) {
+                                setNewsFile(null);
+                                setNewsFilePreview(null);
+                              }
+                            }}
+                            className="w-full h-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
+                            placeholder="Atau masukkan URL..."
+                          />
+                        </div>
+                      </div>
+
+                      {newsFilePreview && (
+                        <div className="relative rounded-2xl overflow-hidden border border-gray-100 bg-gray-50">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setNewsFile(null);
+                              setNewsFilePreview(null);
+                            }}
+                            className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full hover:bg-black transition-all z-10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                          {newsMediaType === 'video' ? (
+                            <video src={newsFilePreview} className="w-full max-h-48 object-contain" controls />
+                          ) : (
+                            <img src={newsFilePreview} alt="Preview" className="w-full max-h-48 object-contain" />
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex gap-4">
@@ -583,9 +657,10 @@ Ketua Kwarran Jatinagara`
 
                   <button 
                     type="submit"
-                    className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-900 transition-all"
+                    disabled={isSubmittingNews}
+                    className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-900 transition-all disabled:opacity-50"
                   >
-                    Publish Berita
+                    {isSubmittingNews ? 'Publishing...' : 'Publish Berita'}
                   </button>
                 </div>
               </form>
@@ -897,7 +972,10 @@ Ketua Kwarran Jatinagara`
               )}
             </div>
           </div>
-      {/* Confirm Delete Modal */}
+        )}
+      </div>
+    </div>
+    {/* Confirm Delete Modal */}
       <ConfirmModal
         isOpen={!!confirmDeleteId}
         onClose={() => setConfirmDeleteId(null)}
