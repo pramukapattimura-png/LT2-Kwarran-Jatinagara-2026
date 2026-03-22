@@ -47,7 +47,7 @@ export default function Navbar() {
                 LT2 <span className="text-gray-400">Jatinagara</span>
               </span>
               <span className="text-[8px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] mt-0.5">
-                Scout Competition
+                28, 29, 30 JUNI 2026
               </span>
             </div>
           </Link>
