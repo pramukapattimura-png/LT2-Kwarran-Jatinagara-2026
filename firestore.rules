@@ -49,6 +49,13 @@ service cloud.firestore {
              (!('updatedAt' in data) || data.updatedAt is timestamp || data.updatedAt == request.time);
     }
 
+    function isValidDokumen(data) {
+      return data.nama is string && data.nama.size() > 0 &&
+             (!('kategori' in data) || data.kategori is string) &&
+             data.url is string && data.url.size() > 0 &&
+             (data.timestamp is timestamp || data.timestamp == request.time);
+    }
+
     function hasOnlyAllowedFields(data, allowedFields) {
       return data.keys().hasOnly(allowedFields);
     }
@@ -99,6 +106,11 @@ service cloud.firestore {
                        (resource.data.keys().contains('authorId') && resource.data.authorId == request.auth.uid) ||
                        (resource.data.keys().contains('authorEmail') && resource.data.authorEmail == request.auth.token.email)
                      ));
+    }
+
+    match /dokumen/{docId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidDokumen(request.resource.data);
     }
     
     match /settings/{docId} {

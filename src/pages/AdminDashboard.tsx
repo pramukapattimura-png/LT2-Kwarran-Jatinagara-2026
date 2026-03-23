@@ -243,8 +243,41 @@ Ketua Kwarran Jatinagara`
       const result = formulaParser.parse(value.substring(1));
       done(result.error ? 0 : result.result);
     } else {
-      done(Number(value) || 0);
+      done(Number(value) || value || 0);
     }
+  });
+
+  formulaParser.on('callRangeValue', (startCellCoord, endCellCoord, done) => {
+    const fragment: any[] = [];
+    for (let row = startCellCoord.row.index; row <= endCellCoord.row.index; row++) {
+      const rowData: any[] = [];
+      for (let col = startCellCoord.column.index; col <= endCellCoord.column.index; col++) {
+        const cell = spreadsheetData[row]?.[col];
+        let value = cell?.value;
+        if (typeof value === 'string' && value.startsWith('=')) {
+          const result = formulaParser.parse(value.substring(1));
+          rowData.push(result.error ? 0 : result.result);
+        } else {
+          rowData.push(Number(value) || value || 0);
+        }
+      }
+      fragment.push(rowData);
+    }
+    done(fragment);
+  });
+
+  // Add RANK function support
+  formulaParser.setFunction('RANK', (params) => {
+    if (params.length < 2) return 0;
+    const value = params[0];
+    const range = params[1]; // This will be the fragment from callRangeValue
+    
+    if (!Array.isArray(range)) return 0;
+    
+    // Flatten range and filter numbers
+    const values = range.flat().filter(v => typeof v === 'number').sort((a, b) => b - a);
+    const rank = values.indexOf(value) + 1;
+    return rank > 0 ? rank : 0;
   });
 
   const evaluateGrid = (grid: any[][]) => {
@@ -959,9 +992,9 @@ Ketua Kwarran Jatinagara`
                       <Save className="h-4 w-4" /> Simpan Rekap
                     </button>
                   </div>
-                  <div className="overflow-auto max-h-[600px] spreadsheet-container">
+                  <div className="p-4 admin-spreadsheet overflow-auto max-h-[600px] spreadsheet-container">
                     <Spreadsheet 
-                      data={spreadsheetData} 
+                      data={evaluateGrid(spreadsheetData)} 
                       onChange={handleSpreadsheetChange}
                     />
                   </div>

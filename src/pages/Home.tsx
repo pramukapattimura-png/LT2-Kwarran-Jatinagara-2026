@@ -26,8 +26,11 @@ export default function Home() {
   const [user, setUser] = useState(auth.currentUser);
 
   const isAdmin = useMemo(() => {
-    return !!user;
-  }, [user]);
+    if (!user) return false;
+    if (user.email === 'pramukapattimura@gmail.com') return true;
+    if (!config || !config.adminEmails) return false;
+    return config.adminEmails.includes(user.email || '');
+  }, [user, config]);
 
   // Post creation state
   const [isCreatingPost, setIsCreatingPost] = useState(false);
@@ -328,8 +331,41 @@ export default function Home() {
         const result = parser.parse(value.substring(1));
         done(result.error ? 0 : result.result);
       } else {
-        done(Number(value) || 0);
+        done(Number(value) || value || 0);
       }
+    });
+
+    parser.on('callRangeValue', (startCellCoord, endCellCoord, done) => {
+      const fragment: any[] = [];
+      for (let row = startCellCoord.row.index; row <= endCellCoord.row.index; row++) {
+        const rowData: any[] = [];
+        for (let col = startCellCoord.column.index; col <= endCellCoord.column.index; col++) {
+          const cell = grid[row]?.[col];
+          let value = cell?.value;
+          if (typeof value === 'string' && value.startsWith('=')) {
+            const result = parser.parse(value.substring(1));
+            rowData.push(result.error ? 0 : result.result);
+          } else {
+            rowData.push(Number(value) || value || 0);
+          }
+        }
+        fragment.push(rowData);
+      }
+      done(fragment);
+    });
+
+    // Add RANK function support
+    parser.setFunction('RANK', (params) => {
+      if (params.length < 2) return 0;
+      const value = params[0];
+      const range = params[1]; // This will be the fragment from callRangeValue
+      
+      if (!Array.isArray(range)) return 0;
+      
+      // Flatten range and filter numbers
+      const values = range.flat().filter(v => typeof v === 'number').sort((a, b) => b - a);
+      const rank = values.indexOf(value) + 1;
+      return rank > 0 ? rank : 0;
     });
 
     const getCellValue = (cell: any) => {
@@ -343,27 +379,41 @@ export default function Home() {
     return (
       <div className="bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse spreadsheet-zebra spreadsheet-compact">
             <thead>
               <tr className="bg-gray-50/50 text-gray-500 uppercase text-[9px] font-black tracking-widest border-b border-gray-100">
-                {grid[0]?.map((cell, i) => (
-                  <th key={i} className="px-6 py-4 border-r border-gray-100 last:border-r-0 text-center">
-                    {cell.value}
-                  </th>
-                ))}
+                {grid[0]?.map((cell, i) => {
+                  const isFreeze = cell.value?.toString().toLowerCase().includes('tenda') || i === 0 || i === 1;
+                  return (
+                    <th key={i} className={cn(
+                      "px-6 py-3 border-r border-gray-100 last:border-r-0 text-center whitespace-nowrap",
+                      isFreeze && "freeze-pane bg-gray-50/90"
+                    )}>
+                      {cell.value}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {grid.slice(1).map((row, rIdx) => (
                 <tr key={rIdx} className="hover:bg-gray-50/80 transition-all group">
-                  {row.map((cell, cIdx) => (
-                    <td key={cIdx} className={cn(
-                      "px-6 py-4 text-sm font-black border-r border-gray-100 last:border-r-0 text-center tabular-nums",
-                      cIdx === 0 ? "text-gray-400" : "text-gray-800"
-                    )}>
-                      {getCellValue(cell)}
-                    </td>
-                  ))}
+                  {row.map((cell, cIdx) => {
+                    const isFreeze = grid[0]?.[cIdx]?.value?.toString().toLowerCase().includes('tenda') || cIdx === 0 || cIdx === 1;
+                    return (
+                      <td key={cIdx} className={cn(
+                        "px-6 py-3 border-r border-gray-100 last:border-r-0 text-center whitespace-nowrap",
+                        isFreeze && "freeze-pane"
+                      )}>
+                        <span className={cn(
+                          "text-xs font-bold",
+                          cIdx === 1 ? "text-black" : "text-gray-500"
+                        )}>
+                          {getCellValue(cell)}
+                        </span>
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
@@ -459,6 +509,33 @@ export default function Home() {
                 <p className="text-[10px] sm:text-xs text-gray-500 font-bold uppercase tracking-[0.2em]">Kabar terbaru dari lapangan</p>
               </div>
             </div>
+
+            {/* Create Post Input */}
+            {user && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-2xl border border-gray-100 p-4 shadow-xl flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition-all"
+                onClick={() => setIsCreatingPost(true)}
+              >
+                <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100 border border-gray-200 flex-shrink-0">
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center text-gray-400">
+                      <User className="h-5 w-5" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-grow bg-gray-50 rounded-full px-4 py-2.5 text-sm text-gray-500 font-medium border border-gray-100">
+                  Apa yang Anda pikirkan, {user.displayName?.split(' ')[0]}?
+                </div>
+                <div className="flex items-center gap-2 text-emerald-500">
+                  <ImageIcon className="h-5 w-5" />
+                  <span className="hidden sm:inline text-xs font-black uppercase tracking-widest">Foto</span>
+                </div>
+              </motion.div>
+            )}
 
             {berita.length > 0 ? (
               <div className="grid grid-cols-1 gap-6">
@@ -686,7 +763,7 @@ export default function Home() {
                       <h3 className="text-xl sm:text-2xl font-black text-black uppercase tracking-tight">{cat.label}</h3>
                       <div className="h-px flex-grow bg-gray-100"></div>
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest bg-gray-50 px-4 py-2 rounded-full border border-gray-100">
-                        {grid.length - 1} Regu
+                        {grid.slice(1).filter(row => row[0]?.value && !isNaN(Number(row[0].value))).length} Regu
                       </span>
                     </div>
                     
