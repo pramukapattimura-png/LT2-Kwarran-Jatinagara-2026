@@ -1,12 +1,17 @@
 import { Link } from 'react-router-dom';
 import { LogIn, LayoutDashboard, LogOut, MoreVertical } from 'lucide-react';
-import { auth, signOut } from '../firebase';
-import { useEffect, useState, useRef } from 'react';
+import { auth, signOut, db, doc, onSnapshot } from '../firebase';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { APP_LOGO_URL } from '../constants';
 
+interface AppConfig {
+  adminEmails?: string[];
+}
+
 export default function Navbar() {
   const [user, setUser] = useState<User | null>(null);
+  const [config, setConfig] = useState<AppConfig | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -14,6 +19,22 @@ export default function Navbar() {
     const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const unsubConfig = onSnapshot(doc(db, 'settings', 'global'), (s) => {
+      if (s.exists()) {
+        setConfig(s.data() as AppConfig);
+      }
+    });
+    return () => unsubConfig();
+  }, []);
+
+  const isAdmin = useMemo(() => {
+    if (!user) return false;
+    if (user.email === 'pramukapattimura@gmail.com') return true;
+    if (!config || !config.adminEmails) return false;
+    return config.adminEmails.includes(user.email || '');
+  }, [user, config]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -56,13 +77,15 @@ export default function Navbar() {
             <Link to="/" className="text-xs sm:text-sm font-bold text-gray-300 hover:text-white px-2 sm:px-3 py-2 transition-colors">Scoreboard</Link>
             {user ? (
               <>
-                <Link 
-                  to="/admin" 
-                  className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl bg-gray-800 text-white hover:bg-gray-700 transition-all text-xs sm:text-sm font-bold border border-gray-700"
-                >
-                  <LayoutDashboard className="h-4 w-4" />
-                  <span className="hidden xs:inline">Admin</span>
-                </Link>
+                {isAdmin && (
+                  <Link 
+                    to="/admin" 
+                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl bg-gray-800 text-white hover:bg-gray-700 transition-all text-xs sm:text-sm font-bold border border-gray-700"
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    <span className="hidden xs:inline">Admin</span>
+                  </Link>
+                )}
                 <button 
                   onClick={handleLogout}
                   className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-red-50 text-red-600 hover:bg-red-100 transition-all border border-red-100"

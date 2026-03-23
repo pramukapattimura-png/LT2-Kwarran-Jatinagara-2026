@@ -33,6 +33,8 @@ export default function AdminDashboard() {
   const [docKategori, setDocKategori] = useState('');
   const [docUrl, setDocUrl] = useState('');
   const [isSubmittingDoc, setIsSubmittingDoc] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [dokumen, setDokumen] = useState<any[]>([]);
 
   // News Form State
@@ -63,11 +65,30 @@ export default function AdminDashboard() {
         navigate('/login');
         return;
       }
-      
-      // We'll check admin status once config is loaded
+      setIsAuthReady(true);
     });
     return () => unsub();
   }, [navigate]);
+
+  useEffect(() => {
+    if (!isAuthReady || !auth.currentUser) return;
+    
+    const user = auth.currentUser;
+    const checkAdmin = () => {
+      const isHardcodedAdmin = user.email === 'pramukapattimura@gmail.com';
+      const isConfigAdmin = config?.adminEmails?.includes(user.email || '');
+      
+      if (isHardcodedAdmin || isConfigAdmin) {
+        setIsAdmin(true);
+      } else if (config) {
+        // If config is loaded and user is not admin, redirect
+        console.log('User is not an admin, redirecting to home:', user.email);
+        navigate('/');
+      }
+    };
+
+    checkAdmin();
+  }, [isAuthReady, config, navigate]);
 
   useEffect(() => {
     const unsubRegu = onSnapshot(collection(db, 'regu'), (s) => {
@@ -536,6 +557,17 @@ Ketua Kwarran Jatinagara`
       alert('Gagal menghapus berita. Pastikan Anda memiliki izin.');
     }
   };
+
+  if (!isAuthReady || !isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto"></div>
+          <p className="text-sm font-black uppercase tracking-widest text-gray-400">Verifying Admin Status...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-16 space-y-10 sm:space-y-20">
