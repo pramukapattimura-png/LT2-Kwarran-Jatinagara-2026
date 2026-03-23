@@ -194,55 +194,83 @@ export default function Home() {
 
   const handleCreatePost = async (e: React.FormEvent) => {
     if (e && e.preventDefault) e.preventDefault();
-    if (!user || !newPostContent.trim()) return;
+    if (!user) return;
+    
+    const content = newPostContent.trim();
+    if (!content && !selectedFile) {
+      setToast({ message: 'Tulis sesuatu atau pilih foto untuk diposting.', type: 'error' });
+      return;
+    }
 
     setIsSubmittingPost(true);
+    console.log('Starting post creation...', { hasContent: !!content, hasFile: !!selectedFile });
+    
+    // Create a timeout promise
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Waktu pengunggahan habis. Silakan coba lagi.')), 30000)
+    );
+
     try {
       let mediaUrl = '';
       
       // Upload file to Storage if selected
       if (selectedFile) {
+        console.log('Uploading file to storage:', selectedFile.name);
         const fileExtension = selectedFile.name.split('.').pop();
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExtension}`;
         const storageRef = ref(storage, `berita/${user.uid}/${fileName}`);
         
-        const uploadResult = await uploadBytes(storageRef, selectedFile);
-        mediaUrl = await getDownloadURL(uploadResult.ref);
+        try {
+          // Wrap upload in timeout
+          const uploadResult = await Promise.race([
+            uploadBytes(storageRef, selectedFile),
+            timeoutPromise
+          ]) as any;
+          
+          console.log('File uploaded successfully, getting download URL...');
+          mediaUrl = await getDownloadURL(uploadResult.ref);
+          console.log('Download URL obtained:', mediaUrl);
+        } catch (storageErr: any) {
+          console.error('Storage upload error:', storageErr);
+          throw new Error(`Gagal mengunggah media: ${storageErr.message || 'Terjadi kesalahan pada server storage.'}`);
+        }
       }
 
+      console.log('Adding document to Firestore...');
       const path = 'berita';
-      await addDoc(collection(db, path), {
-        title: '',
-        content: newPostContent.trim(),
-        mediaUrl: mediaUrl,
-        mediaType: newPostMediaType,
-        timestamp: serverTimestamp(),
-        authorId: user.uid,
-        authorName: user.displayName || 'Anonim',
-        authorEmail: user.email || '',
-        authorPhoto: user.photoURL || '',
-        likes: []
-      });
+      await Promise.race([
+        addDoc(collection(db, path), {
+          title: '',
+          content: content,
+          mediaUrl: mediaUrl,
+          mediaType: newPostMediaType,
+          timestamp: serverTimestamp(),
+          authorId: user.uid,
+          authorName: user.displayName || 'Anonim',
+          authorEmail: user.email || '',
+          authorPhoto: user.photoURL || '',
+          likes: []
+        }),
+        timeoutPromise
+      ]);
+      
+      console.log('Post created successfully!');
       setNewPostContent('');
       setNewPostMediaUrl('');
+      setNewPostMediaType('image');
       setSelectedFile(null);
       setFilePreview(null);
       setIsCreatingPost(false);
       setToast({ message: 'Postingan berhasil dibagikan!', type: 'success' });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating post:', error);
-      try {
-        handleFirestoreError(error, OperationType.CREATE, 'berita');
-      } catch (err: any) {
-        let errorMessage = 'Gagal membuat postingan.';
-        try {
-          const parsed = JSON.parse(err.message);
-          if (parsed.error) errorMessage = `Gagal: ${parsed.error}`;
-        } catch {
-          // Not JSON
-        }
-        setToast({ message: errorMessage, type: 'error' });
+      let errorMessage = error.message || 'Gagal membuat postingan.';
+      
+      if (error.code === 'permission-denied') {
+        errorMessage = 'Anda tidak memiliki izin untuk memposting. Pastikan Anda sudah login.';
       }
+
+      setToast({ message: errorMessage, type: 'error' });
     } finally {
       setIsSubmittingPost(false);
     }
@@ -1006,7 +1034,7 @@ Ketua Kwarran Jatinagara`}
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={handleCreatePost}
-                disabled={isSubmittingPost || !newPostContent.trim()}
+                disabled={isSubmittingPost || (!newPostContent.trim() && !selectedFile)}
                 className="w-full py-3 rounded-xl bg-black text-white font-black uppercase tracking-widest hover:bg-gray-900 transition-all disabled:opacity-50 shadow-lg shadow-gray-200"
               >
                 {isSubmittingPost ? 'Memposting...' : 'Posting'}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db, collection, addDoc, setDoc, doc, onSnapshot, query, orderBy, auth, serverTimestamp, deleteDoc, handleFirestoreError, OperationType, ref, uploadBytes, getDownloadURL, storage } from '../firebase';
 import { Regu, Lomba, Nilai, Kategori, Berita } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Save, Users, Trophy, ClipboardList, AlertCircle, Download, Upload, FileSpreadsheet, Lock, Unlock, Newspaper, Trash2, Settings, Play } from 'lucide-react';
+import { Plus, Save, Users, Trophy, ClipboardList, AlertCircle, Download, Upload, FileSpreadsheet, Lock, Unlock, Newspaper, Trash2, Settings, Play, ShieldAlert } from 'lucide-react';
 import { cn } from '../lib/utils';
 import * as XLSX from 'xlsx';
 import { AppConfig, RekapNilai } from '../types';
@@ -49,8 +49,8 @@ export default function AdminDashboard() {
   const [aboutContent, setAboutContent] = useState('');
   const [aboutImage, setAboutImage] = useState('');
   const [adminEmails, setAdminEmails] = useState('');
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (toast) {
@@ -81,9 +81,10 @@ export default function AdminDashboard() {
       if (isHardcodedAdmin || isConfigAdmin) {
         setIsAdmin(true);
       } else if (config) {
-        // If config is loaded and user is not admin, redirect
+        // If config is loaded and user is not admin, redirect with a message
         console.log('User is not an admin, redirecting to home:', user.email);
-        navigate('/');
+        setToast({ message: `Akun ${user.email} tidak memiliki hak akses admin.`, type: 'error' });
+        setTimeout(() => navigate('/'), 2000);
       }
     };
 
@@ -302,13 +303,14 @@ Ketua Kwarran Jatinagara`
   });
 
   const evaluateGrid = (grid: any[][]) => {
+    if (!grid || !Array.isArray(grid)) return [];
     return grid.map((row, rIdx) => 
       row.map((cell, cIdx) => {
-        if (typeof cell.value === 'string' && cell.value.startsWith('=')) {
+        if (cell && typeof cell.value === 'string' && cell.value.startsWith('=')) {
           const result = formulaParser.parse(cell.value.substring(1));
           return { ...cell, displayValue: result.error ? '#ERR' : result.result };
         }
-        return cell;
+        return cell || { value: "" };
       })
     );
   };
@@ -558,12 +560,39 @@ Ketua Kwarran Jatinagara`
     }
   };
 
-  if (!isAuthReady || !isAdmin) {
+  if (!isAuthReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center space-y-4">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto"></div>
-          <p className="text-sm font-black uppercase tracking-widest text-gray-400">Verifying Admin Status...</p>
+          <p className="text-sm font-black uppercase tracking-widest text-gray-400">Menghubungkan ke Server...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center space-y-6 max-w-md px-4">
+          <div className="mx-auto h-20 w-20 bg-red-50 rounded-3xl flex items-center justify-center border border-red-100">
+            <ShieldAlert className="h-10 w-10 text-red-500" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-black text-black uppercase tracking-tight">Akses Ditolak</h2>
+            <p className="text-sm text-gray-500 font-medium">
+              Akun <span className="text-black font-bold">{auth.currentUser?.email}</span> tidak terdaftar sebagai admin panitia.
+            </p>
+          </div>
+          <div className="bg-gray-50 p-4 rounded-2xl text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed">
+            Silakan hubungi admin utama untuk mendapatkan akses ke dashboard ini.
+          </div>
+          <button 
+            onClick={() => navigate('/')}
+            className="w-full py-4 rounded-2xl bg-black text-white font-black uppercase tracking-widest hover:bg-gray-900 transition-all shadow-lg"
+          >
+            Kembali ke Beranda
+          </button>
         </div>
       </div>
     );

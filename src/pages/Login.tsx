@@ -134,17 +134,21 @@ export default function Login() {
               Akses terbatas hanya untuk panitia yang telah terdaftar dalam sistem.
             </p>
 
-            <div className="bg-gray-50 p-4 rounded-xl space-y-2">
+            <div className="bg-gray-50 p-4 rounded-xl space-y-3">
               <div className="flex items-center gap-2 text-gray-600">
                 <Info className="h-3 w-3" />
-                <span className="text-[9px] font-black uppercase tracking-wider">Bantuan Login Mobile</span>
+                <span className="text-[9px] font-black uppercase tracking-wider">Informasi Admin</span>
               </div>
-              <ul className="text-[8px] text-gray-500 font-bold uppercase tracking-tight space-y-1 list-disc pl-4">
-                <li>Pastikan browser mengizinkan popup</li>
-                <li>Gunakan browser Chrome atau Safari versi terbaru</li>
-                <li>Jika gagal, coba buka aplikasi di tab baru</li>
-                <li>Pastikan domain ini sudah terdaftar di Firebase Console</li>
-              </ul>
+              <div className="space-y-2">
+                <p className="text-[8px] text-gray-500 font-bold uppercase tracking-tight">
+                  Jika Anda adalah panitia namun belum bisa masuk ke Dashboard, silakan hubungi Admin Utama (pramukapattimura@gmail.com) untuk menambahkan email Anda ke daftar akses.
+                </p>
+                <ul className="text-[8px] text-gray-500 font-bold uppercase tracking-tight space-y-1 list-disc pl-4">
+                  <li>Pastikan browser mengizinkan popup</li>
+                  <li>Gunakan browser Chrome atau Safari versi terbaru</li>
+                  <li>Jika gagal di HP, coba gunakan laptop/desktop</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
