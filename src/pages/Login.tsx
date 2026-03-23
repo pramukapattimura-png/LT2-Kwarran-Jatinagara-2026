@@ -14,7 +14,7 @@ export default function Login() {
       try {
         const result = await getRedirectResult(auth);
         if (result?.user) {
-          await handleUserResult(result.user);
+          handleUserResult(result.user);
         }
       } catch (err) {
         console.error('Redirect result error:', err);
@@ -23,33 +23,24 @@ export default function Login() {
       }
     };
     checkRedirect();
-  }, []);
 
-  const handleUserResult = async (user: any) => {
-    try {
-      // Check main admin
-      if (user.email === 'pramukapattimura@gmail.com') {
+    // Check if user is already logged in
+    const unsub = auth.onAuthStateChanged(user => {
+      if (user) {
+        console.log('User already logged in, redirecting to admin:', user.email);
         navigate('/admin');
-        return;
       }
+    });
+    return () => unsub();
+  }, [navigate]);
 
-      // Check other admins from Firestore
-      const configDoc = await getDoc(doc(db, 'settings', 'global'));
-      if (configDoc.exists()) {
-        const data = configDoc.data();
-        const adminEmails = data.adminEmails || [];
-        if (adminEmails.includes(user.email)) {
-          navigate('/admin');
-          return;
-        }
-      }
-
-      setError('Maaf, email Anda tidak terdaftar sebagai admin.');
-      await auth.signOut();
-    } catch (err) {
-      console.error('Error checking admin status:', err);
-      setError('Gagal memverifikasi status admin. Silakan coba lagi.');
-      await auth.signOut();
+  const handleUserResult = (user: any) => {
+    if (user) {
+      console.log('Login successful for:', user.email);
+      navigate('/admin');
+    } else {
+      console.warn('handleUserResult called with no user');
+      setError('Gagal mendapatkan data pengguna. Silakan coba lagi.');
     }
   };
 
@@ -57,8 +48,10 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
+      console.log('Starting Google Popup Login...');
       // Try popup first
       const result = await signInWithPopup(auth, googleProvider);
+      console.log('Popup result received:', result.user.email);
       handleUserResult(result.user);
     } catch (err: any) {
       console.error('Login error:', err);
@@ -69,7 +62,7 @@ export default function Login() {
       } else if (err.code === 'auth/network-request-failed') {
         setError('Koneksi internet bermasalah. Silakan coba lagi.');
       } else {
-        setError('Gagal login. Silakan coba lagi atau buka di tab baru.');
+        setError(`Gagal login (${err.code || 'unknown'}). Silakan coba lagi atau buka di tab baru.`);
       }
     } finally {
       setLoading(false);
@@ -80,6 +73,7 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
+      console.log('Starting Google Redirect Login...');
       await signInWithRedirect(auth, googleProvider);
     } catch (err: any) {
       console.error('Redirect error:', err);

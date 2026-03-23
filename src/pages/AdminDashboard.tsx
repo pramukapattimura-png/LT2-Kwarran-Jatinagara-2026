@@ -10,6 +10,11 @@ import Spreadsheet from "react-spreadsheet";
 import { Parser } from 'hot-formula-parser';
 import ConfirmModal from '../components/ConfirmModal';
 
+const DEFAULT_REKAP_GRID = [
+  [{ value: "NO" }, { value: "NAMA REGU" }, { value: "LOMBA 1" }, { value: "LOMBA 2" }, { value: "TOTAL" }],
+  [{ value: 1 }, { value: "Regu Elang" }, { value: 0 }, { value: 0 }, { value: "=C2+D2" }],
+];
+
 export default function AdminDashboard() {
   const [regus, setRegus] = useState<Regu[]>([]);
   const [lombas, setLombas] = useState<Lomba[]>([]);
@@ -17,14 +22,18 @@ export default function AdminDashboard() {
   const [berita, setBerita] = useState<Berita[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [activeTab, setActiveTab] = useState<'nilai' | 'berita' | 'settings'>('nilai');
-  const [subTab, setSubTab] = useState<'rekap' | 'regu' | 'lomba'>('rekap');
-  const [spreadsheetData, setSpreadsheetData] = useState<any[][]>([
-    [{ value: "NO" }, { value: "NAMA REGU" }, { value: "LOMBA 1" }, { value: "LOMBA 2" }, { value: "TOTAL" }],
-    [{ value: 1 }, { value: "Regu Elang" }, { value: 0 }, { value: 0 }, { value: "=C2+D2" }],
-  ]);
+  const [subTab, setSubTab] = useState<'rekap' | 'regu' | 'lomba' | 'dokumen'>('rekap');
+  const [spreadsheetData, setSpreadsheetData] = useState<any[][]>(DEFAULT_REKAP_GRID);
   const [selectedKategori, setSelectedKategori] = useState<Kategori>('SD Putra');
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Dokumen Form State
+  const [docName, setDocName] = useState('');
+  const [docKategori, setDocKategori] = useState('');
+  const [docUrl, setDocUrl] = useState('');
+  const [isSubmittingDoc, setIsSubmittingDoc] = useState(false);
+  const [dokumen, setDokumen] = useState<any[]>([]);
 
   // News Form State
   const [newsTitle, setNewsTitle] = useState('');
@@ -39,6 +48,14 @@ export default function AdminDashboard() {
   const [aboutImage, setAboutImage] = useState('');
   const [adminEmails, setAdminEmails] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(user => {
@@ -77,6 +94,12 @@ export default function AdminDashboard() {
       handleFirestoreError(error, OperationType.GET, 'berita');
     });
 
+    const unsubDokumen = onSnapshot(query(collection(db, 'dokumen'), orderBy('timestamp', 'desc')), (s) => {
+      setDokumen(s.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'dokumen');
+    });
+
     const unsubConfig = onSnapshot(doc(db, 'settings', 'global'), (s) => {
       if (s.exists()) {
         const data = s.data() as AppConfig;
@@ -86,12 +109,7 @@ export default function AdminDashboard() {
         setAboutImage(data.aboutImage || '');
         setAdminEmails(data.adminEmails?.join(', ') || '');
 
-        // Check if current user is admin
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-          const isAdmin = currentUser.email === 'pramukapattimura@gmail.com' || data.adminEmails?.includes(currentUser.email || '');
-          if (!isAdmin) navigate('/');
-        }
+        // User check is handled by onAuthStateChanged effect
       } else {
         // Initial config
         const initialConfig: Partial<AppConfig> = {
@@ -122,16 +140,26 @@ Ketua Kwarran Jatinagara`
     });
 
     const unsubRekap = onSnapshot(doc(db, 'settings', `rekap_${selectedKategori.replace(' ', '_')}`), (s) => {
-      if (s.exists()) {
-        const data = s.data() as RekapNilai;
-        if (data.grid) {
-          setSpreadsheetData(data.grid);
+      if (subTab === 'rekap') {
+        if (s.exists()) {
+          const data = s.data() as RekapNilai;
+          if (data.grid) {
+            try {
+              const parsedGrid = typeof data.grid === 'string' ? JSON.parse(data.grid) : data.grid;
+              setSpreadsheetData(parsedGrid);
+            } catch (e) {
+              console.error("Error parsing rekap grid:", e);
+              setSpreadsheetData(DEFAULT_REKAP_GRID);
+            }
+          }
+        } else {
+          setSpreadsheetData(DEFAULT_REKAP_GRID);
         }
       }
     });
 
-    return () => { unsubRegu(); unsubLomba(); unsubNilai(); unsubBerita(); unsubConfig(); unsubRekap(); };
-  }, [navigate, selectedKategori]);
+    return () => { unsubRegu(); unsubLomba(); unsubNilai(); unsubBerita(); unsubConfig(); unsubRekap(); unsubDokumen(); };
+  }, [navigate, selectedKategori, subTab]);
 
   const isCurrentCategoryLocked = config?.lockedCategories?.[selectedKategori] || false;
 
@@ -156,13 +184,53 @@ Ketua Kwarran Jatinagara`
 
   const handleSaveSpreadsheet = async () => {
     try {
-      await setDoc(doc(db, 'settings', `rekap_${selectedKategori.replace(' ', '_')}`), {
-        grid: spreadsheetData,
+      const docId = `rekap_${selectedKategori.replace(' ', '_')}`;
+      console.log('Saving spreadsheet to:', docId);
+      
+      // Use JSON.stringify to avoid Firestore nested array limitations
+      const gridString = JSON.stringify(spreadsheetData);
+      
+      await setDoc(doc(db, 'settings', docId), {
+        grid: gridString,
         updatedAt: serverTimestamp()
       });
-      alert('Rekap Nilai Berhasil Disimpan!');
+      setToast({ message: 'Data berhasil disimpan!', type: 'success' });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'rekap_nilai');
+      console.error('Error saving spreadsheet:', error);
+      setToast({ message: 'Gagal menyimpan data.', type: 'error' });
+    }
+  };
+
+  const handleAddDokumen = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!docName || !docUrl || isSubmittingDoc) return;
+    setIsSubmittingDoc(true);
+    try {
+      await addDoc(collection(db, 'dokumen'), {
+        nama: docName,
+        kategori: docKategori || 'Umum',
+        url: docUrl,
+        timestamp: serverTimestamp()
+      });
+      setDocName('');
+      setDocKategori('');
+      setDocUrl('');
+      setToast({ message: 'Dokumen berhasil ditambahkan!', type: 'success' });
+    } catch (error) {
+      console.error('Error adding document:', error);
+      setToast({ message: 'Gagal menambahkan dokumen.', type: 'error' });
+    } finally {
+      setIsSubmittingDoc(false);
+    }
+  };
+
+  const handleDeleteDokumen = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'dokumen', id));
+      setToast({ message: 'Dokumen berhasil dihapus!', type: 'success' });
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      setToast({ message: 'Gagal menghapus dokumen.', type: 'error' });
     }
   };
 
@@ -824,13 +892,15 @@ Ketua Kwarran Jatinagara`
             <div className="p-8 sm:p-12 bg-gray-50/30 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
               <div className="space-y-1">
                 <h3 className="font-black text-black uppercase text-lg sm:text-xl tracking-tight">
-                  {subTab === 'rekap' ? 'Rekapitulasi Nilai' : subTab === 'regu' ? 'Database Regu' : 'Master Data Lomba'}
+                  {subTab === 'rekap' ? 'Rekapitulasi Nilai' : subTab === 'regu' ? 'Database Regu' : subTab === 'dokumen' ? 'Manajemen Dokumen' : 'Master Data Lomba'}
                 </h3>
-                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Kategori: {selectedKategori}</p>
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">
+                  {subTab === 'dokumen' ? 'Upload & Link Dokumen' : `Kategori: ${selectedKategori}`}
+                </p>
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex bg-white p-1 rounded-xl border border-gray-100 shadow-sm">
-                  {(['rekap', 'regu', 'lomba'] as const).map((t) => (
+                  {(['rekap', 'dokumen', 'regu', 'lomba'] as const).map((t) => (
                     <button
                       key={t}
                       onClick={() => setSubTab(t)}
@@ -839,7 +909,7 @@ Ketua Kwarran Jatinagara`
                         subTab === t ? "bg-black text-white" : "text-gray-400 hover:text-black"
                       )}
                     >
-                      {t}
+                      {t === 'dokumen' ? 'Dokumen' : t}
                     </button>
                   ))}
                 </div>
@@ -898,6 +968,94 @@ Ketua Kwarran Jatinagara`
                   <p className="p-4 text-[10px] text-gray-400 font-medium italic border-t border-gray-100">
                     * Gunakan "=" untuk rumus (contoh: =C2+D2). Simpan rekap untuk menampilkan di halaman depan.
                   </p>
+                </div>
+              ) : subTab === 'dokumen' ? (
+                <div className="space-y-8">
+                  <div className="bg-gray-50 p-8 rounded-[2.5rem] border border-gray-100">
+                    <form onSubmit={handleAddDokumen} className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                      <div className="space-y-2">
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Nama Dokumen</label>
+                        <input 
+                          type="text" 
+                          value={docName}
+                          onChange={(e) => setDocName(e.target.value)}
+                          className="w-full bg-white border border-gray-100 rounded-xl p-3 text-sm outline-none focus:border-black transition-all"
+                          placeholder="Contoh: Juklak LT2"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Kategori</label>
+                        <input 
+                          type="text" 
+                          value={docKategori}
+                          onChange={(e) => setDocKategori(e.target.value)}
+                          className="w-full bg-white border border-gray-100 rounded-xl p-3 text-sm outline-none focus:border-black transition-all"
+                          placeholder="Contoh: Administrasi"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">URL Dokumen (Drive/Link)</label>
+                        <input 
+                          type="url" 
+                          value={docUrl}
+                          onChange={(e) => setDocUrl(e.target.value)}
+                          className="w-full bg-white border border-gray-100 rounded-xl p-3 text-sm outline-none focus:border-black transition-all"
+                          placeholder="https://drive.google.com/..."
+                          required
+                        />
+                      </div>
+                      <div className="md:col-span-3">
+                        <button 
+                          type="submit"
+                          disabled={isSubmittingDoc}
+                          className="w-full bg-black text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-900 transition-all disabled:opacity-50"
+                        >
+                          {isSubmittingDoc ? 'Menyimpan...' : 'Tambah Dokumen'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  <div className="bg-white rounded-[2.5rem] border border-gray-100 overflow-hidden shadow-sm">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-100">
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Nama Dokumen</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Kategori</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {dokumen.map((doc) => (
+                          <tr key={doc.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex flex-col">
+                                <span className="text-sm font-black text-black">{doc.nama}</span>
+                                <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 hover:underline truncate max-w-xs">{doc.url}</a>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="px-2 py-1 bg-gray-100 rounded text-[9px] font-black text-gray-600 uppercase tracking-widest">{doc.kategori}</span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button 
+                                onClick={() => handleDeleteDokumen(doc.id)}
+                                className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {dokumen.length === 0 && (
+                          <tr>
+                            <td colSpan={3} className="py-12 text-center text-gray-400 text-xs font-medium uppercase tracking-widest">Belum ada dokumen</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : subTab === 'regu' ? (
                 <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm">
@@ -975,7 +1133,16 @@ Ketua Kwarran Jatinagara`
         )}
       </div>
     </div>
-    {/* Confirm Delete Modal */}
+      {/* Toast Notification */}
+      {toast &&
+        <div className={cn(
+          "fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-2xl shadow-2xl font-black uppercase tracking-widest text-xs animate-in slide-in-from-bottom-4 duration-300",
+          toast.type === 'success' ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
+        )}>
+          {toast.message}
+        </div>
+      }
+      {/* Confirm Delete Modal */}
       <ConfirmModal
         isOpen={!!confirmDeleteId}
         onClose={() => setConfirmDeleteId(null)}

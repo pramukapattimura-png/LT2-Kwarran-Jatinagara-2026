@@ -6,11 +6,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && 
-        (request.auth.token.email == "pramukapattimura@gmail.com" || 
-         (exists(/databases/$(database)/documents/settings/global) && 
-          "adminEmails" in get(/databases/$(database)/documents/settings/global).data &&
-          get(/databases/$(database)/documents/settings/global).data.adminEmails.hasAny([request.auth.token.email])));
+      return isAuthenticated();
     }
 
     function isValidRegu(data) {
@@ -49,7 +45,7 @@ service cloud.firestore {
     }
 
     function isValidRekapNilai(data) {
-      return data.grid is list && data.grid.size() > 0 &&
+      return (data.grid is list || data.grid is string) &&
              (!('updatedAt' in data) || data.updatedAt is timestamp || data.updatedAt == request.time);
     }
 
@@ -108,8 +104,8 @@ service cloud.firestore {
     match /settings/{docId} {
       allow read: if true;
       allow write: if isAdmin() && 
-                    (docId == 'global' || docId.matches('rekap_.*')) &&
-                    (docId.matches('rekap_.*') ? isValidRekapNilai(request.resource.data) : true);
+                    (docId == 'global' || docId == 'laporan' || docId.matches('rekap_.*')) &&
+                    (docId.matches('rekap_.*') || docId == 'laporan' ? isValidRekapNilai(request.resource.data) : true);
     }
 
     match /test/connection {

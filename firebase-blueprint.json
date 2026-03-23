@@ -105,6 +105,15 @@
         "grid": { "type": "array", "items": { "type": "array", "items": { "type": "object" } } },
         "updatedAt": { "type": "string", "format": "date-time" }
       }
+    },
+    "Laporan": {
+      "title": "Laporan",
+      "description": "Data laporan dalam bentuk grid spreadsheet",
+      "type": "object",
+      "properties": {
+        "grid": { "type": "array", "items": { "type": "array", "items": { "type": "object" } } },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "firestore": {
@@ -135,6 +144,10 @@
     "/settings/rekap_{category}": {
       "schema": "RekapNilai",
       "description": "Rekap nilai per kategori"
+    },
+    "/settings/laporan": {
+      "schema": "Laporan",
+      "description": "Laporan kegiatan"
     }
   }
 }

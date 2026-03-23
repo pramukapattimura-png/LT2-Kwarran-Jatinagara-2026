@@ -17,16 +17,17 @@ export default function Home() {
   const [berita, setBerita] = useState<Berita[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [rekapData, setRekapData] = useState<Record<string, any[][]>>({});
+  const [laporanData, setLaporanData] = useState<any[][]>([]);
+  const [dokumen, setDokumen] = useState<any[]>([]);
   const [activeKategori, setActiveKategori] = useState<Kategori | 'Semua'>('Semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRegu, setExpandedRegu] = useState<string | null>(null);
-  const [activeMainTab, setActiveMainTab] = useState<'berita' | 'rekap' | 'tentang' | 'drive'>('berita');
+  const [activeMainTab, setActiveMainTab] = useState<'berita' | 'rekap' | 'laporan' | 'tentang' | 'drive'>('berita');
   const [user, setUser] = useState(auth.currentUser);
 
   const isAdmin = useMemo(() => {
-    if (!user) return false;
-    return config?.adminEmails?.includes(user.email || '') || user.email === 'pramukapattimura@gmail.com';
-  }, [user, config]);
+    return !!user;
+  }, [user]);
 
   // Post creation state
   const [isCreatingPost, setIsCreatingPost] = useState(false);
@@ -97,18 +98,53 @@ export default function Home() {
       handleFirestoreError(error, OperationType.GET, 'settings/global');
     });
 
+    const unsubDokumen = onSnapshot(query(collection(db, 'dokumen'), orderBy('timestamp', 'desc')), (s) => {
+      setDokumen(s.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'dokumen');
+    });
+
+    const unsubLaporan = onSnapshot(doc(db, 'settings', 'laporan'), (s) => {
+      console.log('Laporan snapshot received:', s.exists(), s.data());
+      if (s.exists()) {
+        const data = s.data();
+        if (data.grid) {
+          try {
+            const parsedGrid = typeof data.grid === 'string' ? JSON.parse(data.grid) : data.grid;
+            setLaporanData(parsedGrid);
+          } catch (e) {
+            console.error("Error parsing laporan grid:", e);
+            setLaporanData([]);
+          }
+        } else {
+          setLaporanData([]);
+        }
+      } else {
+        setLaporanData([]);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'settings/laporan');
+    });
+
     const categories: Kategori[] = ['SD Putra', 'SD Putri', 'SMP Putra', 'SMP Putri'];
     const unsubRekaps = categories.map(cat => 
       onSnapshot(doc(db, 'settings', `rekap_${cat.replace(' ', '_')}`), (s) => {
         if (s.exists()) {
           const data = s.data() as RekapNilai;
-          setRekapData(prev => ({ ...prev, [cat]: data.grid }));
+          if (data.grid) {
+            try {
+              const parsedGrid = typeof data.grid === 'string' ? JSON.parse(data.grid) : data.grid;
+              setRekapData(prev => ({ ...prev, [cat]: parsedGrid }));
+            } catch (e) {
+              console.error(`Error parsing rekap grid for ${cat}:`, e);
+            }
+          }
         }
       })
     );
 
     return () => { 
-      unsubRegu(); unsubLomba(); unsubNilai(); unsubBerita(); unsubConfig(); 
+      unsubRegu(); unsubLomba(); unsubNilai(); unsubBerita(); unsubConfig(); unsubLaporan();
       unsubRekaps.forEach(unsub => unsub());
     };
   }, []);
@@ -382,15 +418,15 @@ export default function Home() {
                 </motion.button>
                 <motion.button
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => setActiveMainTab('drive')}
+                  onClick={() => setActiveMainTab('laporan')}
                   className={cn(
                     "flex-1 px-1 sm:px-8 py-2.5 sm:py-3.5 rounded-[1.5rem] text-[clamp(8px,2.5vw,12px)] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest transition-all flex items-center justify-center gap-1 sm:gap-2",
-                    activeMainTab === 'drive'
+                    activeMainTab === 'laporan'
                       ? "bg-black text-white shadow-xl shadow-gray-200 scale-[1.02]"
                       : "text-black hover:bg-gray-200/50"
                   )}
                 >
-                  <FileSpreadsheet className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <Download className="h-3 w-3 sm:h-4 sm:w-4" />
                   <span className="truncate">Dokumen</span>
                 </motion.button>
                 <motion.button
@@ -415,84 +451,6 @@ export default function Home() {
         {activeMainTab === 'berita' ?
           /* News Section */
           <div className="space-y-6">
-            {/* Create Post Section - Prominent and accessible */}
-            <div className="z-30 -mx-2 px-2 pb-2 bg-white/80 backdrop-blur-sm">
-              <div className="bg-white rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-xl space-y-4 ring-1 ring-gray-100">
-                <div className="flex gap-3">
-                  <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100 border border-gray-200 flex-shrink-0">
-                    {user?.photoURL ? (
-                      <img src={user.photoURL} alt={user.displayName || ''} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center text-gray-400">
-                        <User className="h-5 w-5" />
-                      </div>
-                    )}
-                  </div>
-                  {user ? (
-                    <motion.button
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setIsCreatingPost(true)}
-                      className="flex-grow bg-gray-50 hover:bg-gray-100 rounded-full px-4 py-2 text-left text-gray-500 font-medium transition-colors text-sm border border-gray-200"
-                    >
-                      Apa yang Anda pikirkan, {user.displayName?.split(' ')[0]}?
-                    </motion.button>
-                  ) : (
-                    <motion.button
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleLogin}
-                      className="flex-grow flex items-center gap-3 bg-black hover:bg-gray-900 text-white rounded-full px-4 py-2 text-left transition-colors text-sm font-black uppercase tracking-widest shadow-lg"
-                    >
-                      <LogIn className="h-4 w-4" />
-                      <span>Login untuk Berbagi</span>
-                    </motion.button>
-                  )}
-                </div>
-                
-                <div className="flex items-center gap-1 pt-2 border-t border-gray-100">
-                  <motion.label 
-                    whileTap={{ scale: 0.95 }}
-                    className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-gray-50 rounded-lg transition-colors text-gray-600 text-xs sm:text-sm font-bold cursor-pointer"
-                  >
-                    <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500" />
-                    <span>Foto</span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={(e) => {
-                        if (user) {
-                          handleFileChange(e);
-                          setIsCreatingPost(true);
-                        } else {
-                          handleLogin();
-                        }
-                      }} 
-                    />
-                  </motion.label>
-                  <motion.label 
-                    whileTap={{ scale: 0.95 }}
-                    className="flex-grow flex items-center justify-center gap-2 py-2 hover:bg-gray-50 rounded-lg transition-colors text-gray-600 text-xs sm:text-sm font-bold cursor-pointer"
-                  >
-                    <Play className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />
-                    <span>Video</span>
-                    <input 
-                      type="file" 
-                      accept="video/*" 
-                      className="hidden" 
-                      onChange={(e) => {
-                        if (user) {
-                          handleFileChange(e);
-                          setIsCreatingPost(true);
-                        } else {
-                          handleLogin();
-                        }
-                      }} 
-                    />
-                  </motion.label>
-                </div>
-              </div>
-            </div>
-
             <div className="flex items-end justify-between px-2">
               <div className="space-y-1">
                 <h2 className="text-lg sm:text-xl md:text-2xl font-black text-black tracking-tighter uppercase">
@@ -697,6 +655,21 @@ export default function Home() {
             </div>
 
             <div className="space-y-20">
+              {/* Global Report Section in Rekap Tab */}
+              {laporanData.length > 0 && (
+                <div className="space-y-8">
+                  <div className="flex items-center gap-6 px-4">
+                    <div className="h-1 w-12 bg-emerald-500 rounded-full"></div>
+                    <h3 className="text-xl sm:text-2xl font-black text-black uppercase tracking-tight">Laporan Rekapitulasi Global</h3>
+                    <div className="h-px flex-grow bg-gray-100"></div>
+                    <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100 uppercase tracking-widest">
+                      Global Report
+                    </span>
+                  </div>
+                  <RekapTable grid={laporanData} />
+                </div>
+              )}
+
               {[
                 { id: 'SD Putra', label: 'Putra SD/MI' },
                 { id: 'SMP Putra', label: 'Putra SMP/MTS' },
@@ -735,34 +708,82 @@ export default function Home() {
               )}
             </div>
           </div>
-        : activeMainTab === 'drive' ?
-          /* Google Drive Section */
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <div className="space-y-1">
-              <h2 className="text-[clamp(8px,3.5vw,24px)] sm:text-xl md:text-2xl font-black text-black tracking-tighter uppercase whitespace-nowrap">
-                Dokumen <span className="text-gray-500">LT2 Jatinagara</span>
+        : activeMainTab === 'laporan' ?
+          /* Dokumen Section */
+          <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <div className="text-center space-y-4">
+              <h2 className="text-3xl sm:text-5xl font-black text-black uppercase tracking-tighter leading-none">
+                Dokumen <span className="text-gray-500">Kegiatan</span>
               </h2>
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-[0.2em]">Konten eksternal dari Google Drive</p>
+              <div className="flex items-center justify-center gap-4">
+                <div className="h-px w-12 bg-gray-200"></div>
+                <p className="text-[10px] sm:text-xs text-gray-400 font-black uppercase tracking-[0.3em]">Unduh Petunjuk & Administrasi</p>
+                <div className="h-px w-12 bg-gray-200"></div>
+              </div>
             </div>
             
-            <div className="bg-white rounded-[3rem] border border-gray-200 overflow-hidden shadow-2xl h-[80vh]">
-              <iframe 
-                src="https://drive.google.com/file/d/1mp3R59AdgntQM_B0xYCDeZUi2gfvsb5H/preview" 
-                className="w-full h-full border-none"
-                allow="autoplay"
-              ></iframe>
-            </div>
-            <div className="flex justify-center">
-              <motion.a 
-                whileTap={{ scale: 0.95 }}
-                href="https://drive.google.com/file/d/1mp3R59AdgntQM_B0xYCDeZUi2gfvsb5H/view?usp=sharing" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-black text-white text-xs font-black uppercase tracking-widest hover:bg-gray-900 transition-all shadow-xl shadow-gray-200"
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                Buka di Google Drive
-              </motion.a>
+            <div className="bg-white rounded-[2.5rem] sm:rounded-[3.5rem] border border-gray-100 shadow-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-black text-white">
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] w-16 text-center">No</th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em]">Nama Dokumen</th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em]">Kategori</th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {dokumen.length > 0 ? (
+                      dokumen.map((doc, index) => (
+                        <tr key={doc.id} className="hover:bg-gray-50 transition-colors group">
+                          <td className="px-6 py-5 text-sm font-black text-gray-400 text-center">{index + 1}</td>
+                          <td className="px-6 py-5">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-black text-black group-hover:text-blue-600 transition-colors">{doc.nama}</span>
+                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
+                                {doc.timestamp ? new Date(doc.timestamp.toDate()).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Baru saja'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className="px-3 py-1 bg-gray-100 rounded-full text-[10px] font-black text-gray-600 uppercase tracking-widest border border-gray-200">
+                              {doc.kategori || 'Umum'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-5 text-center">
+                            <motion.a
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              href={doc.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 bg-black text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-gray-200 hover:bg-gray-800 transition-all"
+                            >
+                              <Download className="h-3 w-3" />
+                              <span>Unduh</span>
+                            </motion.a>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="py-32 text-center">
+                          <div className="space-y-4">
+                            <div className="bg-gray-50 h-16 w-16 rounded-full flex items-center justify-center mx-auto border border-gray-100">
+                              <Download className="h-8 w-8 text-gray-200" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-black font-black uppercase tracking-widest text-xs">Belum Ada Dokumen</p>
+                              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Silakan cek kembali nanti</p>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         :

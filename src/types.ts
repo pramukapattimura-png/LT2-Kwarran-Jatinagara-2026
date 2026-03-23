@@ -77,3 +77,11 @@ export interface RekapNilai {
   grid: any[][];
   updatedAt: any;
 }
+
+export interface Dokumen {
+  id: string;
+  nama: string;
+  kategori: string;
+  url: string;
+  timestamp: any;
+}
