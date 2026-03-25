@@ -227,7 +227,16 @@ export default function Home() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('Cloudinary API Error Response:', errorData);
-        throw new Error(errorData.error?.message || errorData.message || `Gagal mengunggah ke Cloudinary (Status: ${response.status})`);
+        
+        let errorMessage = errorData.error?.message || errorData.message || `Gagal mengunggah ke Cloudinary (Status: ${response.status})`;
+        
+        if (errorMessage.includes('Unknown API key')) {
+          errorMessage = 'Error: "Unknown API key". Ini biasanya berarti Upload Preset Anda di Cloudinary BELUM diatur ke mode "Unsigned". Silakan buka Settings > Upload di Cloudinary, edit preset "' + uploadPreset + '", dan ubah Signing Mode menjadi "Unsigned".';
+        } else if (errorMessage.includes('Cloud name not found')) {
+          errorMessage = 'Error: "Cloud name not found". Pastikan Cloud Name "' + cloudName + '" sudah benar dan sesuai dengan Dashboard Cloudinary Anda.';
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
