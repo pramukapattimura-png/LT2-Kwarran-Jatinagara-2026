@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { db, collection, onSnapshot, query, orderBy, doc, auth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, addDoc, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteDoc, handleFirestoreError, OperationType, ref, uploadBytes, getDownloadURL, storage } from '../firebase';
+import { db, collection, onSnapshot, query, orderBy, doc, auth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, addDoc, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteDoc, handleFirestoreError, OperationType, ref, uploadBytes, getDownloadURL, storage, uploadBytesResumable } from '../firebase';
 import { Regu, Lomba, Nilai, Kategori, ScoreSummary, Berita, AppConfig, RekapNilai } from '../types';
-import { Trophy, Medal, Search, Filter, ChevronRight, ChevronDown, Newspaper, Play, Image as ImageIcon, ArrowDownCircle, Heart, MessageCircle, Share2, MoreHorizontal, Trash2, LogIn, User, Info, FileSpreadsheet, Download } from 'lucide-react';
+import { compressImage } from '../lib/imageUtils';
+import { Trophy, Medal, Search, Filter, ChevronRight, ChevronDown, Newspaper, Play, Image as ImageIcon, ArrowDownCircle, Heart, MessageCircle, Share2, MoreHorizontal, Trash2, LogIn, User, Info, FileSpreadsheet, Download, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import CommentSection, { CommentSectionRef } from '../components/CommentSection';
@@ -9,6 +10,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import { formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Parser } from 'hot-formula-parser';
+import { GoogleGenAI } from "@google/genai";
 
 export default function Home() {
   const [regus, setRegus] = useState<Regu[]>([]);
@@ -38,6 +40,7 @@ export default function Home() {
   const [newPostMediaUrl, setNewPostMediaUrl] = useState('');
   const [newPostMediaType, setNewPostMediaType] = useState<'image' | 'video'>('image');
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -192,6 +195,92 @@ export default function Home() {
     reader.readAsDataURL(file);
   };
 
+  const [isGeneratingCaption, setIsGeneratingCaption] = useState(false);
+
+  const uploadToCloudinary = async (file: File | Blob): Promise<string> => {
+    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME?.trim();
+    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET?.trim();
+
+    console.log('Cloudinary Config:', { 
+      cloudName: cloudName ? `${cloudName.substring(0, 3)}...` : 'MISSING',
+      preset: uploadPreset ? `${uploadPreset.substring(0, 3)}...` : 'MISSING'
+    });
+
+    if (!cloudName || !uploadPreset) {
+      throw new Error('Konfigurasi Cloudinary belum lengkap. Pastikan VITE_CLOUDINARY_CLOUD_NAME dan VITE_CLOUDINARY_UPLOAD_PRESET sudah diatur di menu Settings > Secrets dengan benar.');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', uploadPreset);
+
+    const url = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
+    console.log('Fetching Cloudinary URL:', url.replace(cloudName, '***'));
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        mode: 'cors', // Explicitly set cors mode
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Cloudinary API Error Response:', errorData);
+        throw new Error(errorData.error?.message || errorData.message || `Gagal mengunggah ke Cloudinary (Status: ${response.status})`);
+      }
+
+      const data = await response.json();
+      return data.secure_url;
+    } catch (err: any) {
+      console.error('Detailed Cloudinary Fetch Error:', err);
+      if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
+        throw new Error('Koneksi ke Cloudinary diblokir atau gagal. Pastikan koneksi internet stabil dan tidak ada AdBlocker yang memblokir api.cloudinary.com. Jika Anda menggunakan VPN, coba matikan sejenak.');
+      }
+      throw new Error(err.message || 'Terjadi kesalahan jaringan saat mengunggah ke Cloudinary');
+    }
+  };
+
+  const handleGenerateAICaption = async () => {
+    if (!selectedFile || !selectedFile.type.startsWith('image/')) {
+      setToast({ message: 'Pilih foto terlebih dahulu untuk membuat caption AI.', type: 'error' });
+      return;
+    }
+
+    setIsGeneratingCaption(true);
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(selectedFile);
+      });
+      const base64Data = await base64Promise;
+
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          {
+            parts: [
+              { text: "Berikan caption singkat, menarik, dan positif untuk foto kegiatan pramuka ini (maksimal 15 kata):" },
+              { inlineData: { mimeType: selectedFile.type, data: base64Data } }
+            ]
+          }
+        ]
+      });
+      
+      if (response.text) {
+        setNewPostContent(prev => prev ? `${prev}\n\n${response.text}` : response.text);
+        setToast({ message: 'Caption AI berhasil dibuat!', type: 'success' });
+      }
+    } catch (err) {
+      console.error('Gemini error:', err);
+      setToast({ message: 'Gagal membuat caption AI.', type: 'error' });
+    } finally {
+      setIsGeneratingCaption(false);
+    }
+  };
+
   const handleCreatePost = async (e: React.FormEvent) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!user) return;
@@ -203,36 +292,64 @@ export default function Home() {
     }
 
     setIsSubmittingPost(true);
+    setUploadProgress(0);
     console.log('Starting post creation...', { hasContent: !!content, hasFile: !!selectedFile });
     
-    // Create a timeout promise
+    // Create a timeout promise - increased to 300 seconds (5 minutes)
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Waktu pengunggahan habis. Silakan coba lagi.')), 30000)
+      setTimeout(() => reject(new Error('Waktu pengunggahan habis. Koneksi internet mungkin sangat lambat atau file terlalu besar. Silakan coba lagi dengan file yang lebih kecil.')), 300000)
     );
 
     try {
       let mediaUrl = '';
       
-      // Upload file to Storage if selected
+      // Upload file to Cloudinary if selected
       if (selectedFile) {
-        console.log('Uploading file to storage:', selectedFile.name);
-        const fileExtension = selectedFile.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExtension}`;
-        const storageRef = ref(storage, `berita/${user.uid}/${fileName}`);
+        let fileToUpload: Blob | File = selectedFile;
+        
+        // Compress image if it's an image and larger than 1MB
+        if (selectedFile.type.startsWith('image/') && selectedFile.size > 1024 * 1024) {
+          try {
+            console.log('Compressing image before upload...');
+            fileToUpload = await compressImage(selectedFile);
+            console.log('Image compressed. Original size:', selectedFile.size, 'New size:', fileToUpload.size);
+          } catch (compressErr) {
+            console.error('Compression failed, using original file:', compressErr);
+          }
+        }
+
+        console.log('Uploading file to Cloudinary:', selectedFile.name, 'Final Size:', fileToUpload.size);
         
         try {
-          // Wrap upload in timeout
-          const uploadResult = await Promise.race([
-            uploadBytes(storageRef, selectedFile),
-            timeoutPromise
-          ]) as any;
+          // Use Cloudinary for upload to avoid Firebase Storage costs/issues
+          const uploadPromise = uploadToCloudinary(fileToUpload);
           
-          console.log('File uploaded successfully, getting download URL...');
-          mediaUrl = await getDownloadURL(uploadResult.ref);
-          console.log('Download URL obtained:', mediaUrl);
-        } catch (storageErr: any) {
-          console.error('Storage upload error:', storageErr);
-          throw new Error(`Gagal mengunggah media: ${storageErr.message || 'Terjadi kesalahan pada server storage.'}`);
+          // Simulate progress for Cloudinary upload since fetch doesn't give progress easily without XHR
+          const progressInterval = setInterval(() => {
+            setUploadProgress(prev => {
+              if (prev >= 95) {
+                clearInterval(progressInterval);
+                return 95;
+              }
+              return prev + 5;
+            });
+          }, 500);
+
+          mediaUrl = await Promise.race([
+            uploadPromise,
+            timeoutPromise
+          ]) as string;
+          
+          clearInterval(progressInterval);
+          setUploadProgress(100);
+          console.log('File uploaded to Cloudinary successfully:', mediaUrl);
+        } catch (error: any) {
+          console.error('Cloudinary upload error:', error);
+          setToast({ 
+            message: `Gagal mengunggah ke Cloudinary: ${error.message}. Pastikan VITE_CLOUDINARY_CLOUD_NAME dan VITE_CLOUDINARY_UPLOAD_PRESET sudah benar.`, 
+            type: 'error' 
+          });
+          throw error;
         }
       }
 
@@ -273,6 +390,7 @@ export default function Home() {
       setToast({ message: errorMessage, type: 'error' });
     } finally {
       setIsSubmittingPost(false);
+      setUploadProgress(0);
     }
   };
 
@@ -990,17 +1108,34 @@ Ketua Kwarran Jatinagara`}
 
               {filePreview && (
                 <div className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
-                  <motion.button 
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => {
-                      setSelectedFile(null);
-                      setFilePreview(null);
-                      setNewPostMediaUrl('');
-                    }}
-                    className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black text-white rounded-full transition-all z-10"
-                  >
-                    <ChevronDown className="h-4 w-4 rotate-180" />
-                  </motion.button>
+                  <div className="absolute top-2 right-2 flex gap-2 z-10">
+                    {selectedFile?.type.startsWith('image/') && (
+                      <motion.button 
+                        whileTap={{ scale: 0.9 }}
+                        onClick={handleGenerateAICaption}
+                        disabled={isGeneratingCaption}
+                        className={cn(
+                          "p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-lg transition-all flex items-center gap-1 px-3",
+                          isGeneratingCaption && "opacity-50 cursor-not-allowed"
+                        )}
+                        title="Buat Caption dengan AI"
+                      >
+                        <Sparkles className={cn("h-4 w-4", isGeneratingCaption && "animate-pulse")} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">AI Caption</span>
+                      </motion.button>
+                    )}
+                    <motion.button 
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => {
+                        setSelectedFile(null);
+                        setFilePreview(null);
+                        setNewPostMediaUrl('');
+                      }}
+                      className="p-1.5 bg-black/50 hover:bg-black text-white rounded-full transition-all"
+                    >
+                      <ChevronDown className="h-4 w-4 rotate-180" />
+                    </motion.button>
+                  </div>
                   {newPostMediaType === 'video' ? (
                     <video src={filePreview} className="w-full max-h-64 object-contain" controls />
                   ) : (
@@ -1031,13 +1166,29 @@ Ketua Kwarran Jatinagara`}
                 </div>
               </div>
 
+              {isSubmittingPost && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-500">
+                    <span>{uploadProgress < 100 ? 'Sedang Mengunggah...' : 'Menyimpan Postingan...'}</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${uploadProgress}%` }}
+                      className="h-full bg-emerald-500"
+                    />
+                  </div>
+                </div>
+              )}
+
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={handleCreatePost}
                 disabled={isSubmittingPost || (!newPostContent.trim() && !selectedFile)}
                 className="w-full py-3 rounded-xl bg-black text-white font-black uppercase tracking-widest hover:bg-gray-900 transition-all disabled:opacity-50 shadow-lg shadow-gray-200"
               >
-                {isSubmittingPost ? 'Memposting...' : 'Posting'}
+                {isSubmittingPost ? (uploadProgress < 100 ? 'MENGUNGGAH...' : 'MEMPOSTING...') : 'Posting'}
               </motion.button>
             </div>
           </motion.div>

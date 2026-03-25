@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { db, collection, addDoc, setDoc, doc, onSnapshot, query, orderBy, auth, serverTimestamp, deleteDoc, handleFirestoreError, OperationType, ref, uploadBytes, getDownloadURL, storage } from '../firebase';
+import { db, collection, addDoc, setDoc, doc, onSnapshot, query, orderBy, auth, serverTimestamp, deleteDoc, handleFirestoreError, OperationType, ref, uploadBytes, getDownloadURL, storage, uploadBytesResumable } from '../firebase';
 import { Regu, Lomba, Nilai, Kategori, Berita } from '../types';
+import { compressImage } from '../lib/imageUtils';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Save, Users, Trophy, ClipboardList, AlertCircle, Download, Upload, FileSpreadsheet, Lock, Unlock, Newspaper, Trash2, Settings, Play, ShieldAlert } from 'lucide-react';
+import { Plus, Save, Users, Trophy, ClipboardList, AlertCircle, Download, Upload, FileSpreadsheet, Lock, Unlock, Newspaper, Trash2, Settings, Play, ShieldAlert, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 import * as XLSX from 'xlsx';
 import { AppConfig, RekapNilai } from '../types';
 import Spreadsheet from "react-spreadsheet";
 import { Parser } from 'hot-formula-parser';
+import { GoogleGenAI } from "@google/genai";
 import ConfirmModal from '../components/ConfirmModal';
 
 const DEFAULT_REKAP_GRID = [
@@ -45,6 +47,7 @@ export default function AdminDashboard() {
   const [newsFile, setNewsFile] = useState<File | null>(null);
   const [newsFilePreview, setNewsFilePreview] = useState<string | null>(null);
   const [isSubmittingNews, setIsSubmittingNews] = useState(false);
+  const [newsUploadProgress, setNewsUploadProgress] = useState(0);
   const [marqueeText, setMarqueeText] = useState('');
   const [aboutContent, setAboutContent] = useState('');
   const [aboutImage, setAboutImage] = useState('');
@@ -504,35 +507,164 @@ Ketua Kwarran Jatinagara`
     alert('Settings updated!');
   };
 
+  const [isGeneratingCaption, setIsGeneratingCaption] = useState(false);
+
+  const uploadToCloudinary = async (file: File | Blob): Promise<string> => {
+    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME?.trim();
+    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET?.trim();
+
+    console.log('Admin Cloudinary Config:', { 
+      cloudName: cloudName ? `${cloudName.substring(0, 3)}...` : 'MISSING',
+      preset: uploadPreset ? `${uploadPreset.substring(0, 3)}...` : 'MISSING'
+    });
+
+    if (!cloudName || !uploadPreset) {
+      throw new Error('Konfigurasi Cloudinary belum lengkap. Silakan hubungi admin untuk mengatur VITE_CLOUDINARY_CLOUD_NAME dan VITE_CLOUDINARY_UPLOAD_PRESET di menu Settings > Secrets.');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', uploadPreset);
+
+    const url = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        mode: 'cors',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Admin Cloudinary API Error:', errorData);
+        throw new Error(errorData.error?.message || errorData.message || `Gagal mengunggah ke Cloudinary (Status: ${response.status})`);
+      }
+
+      const data = await response.json();
+      return data.secure_url;
+    } catch (err: any) {
+      console.error('Admin Cloudinary Fetch Error:', err);
+      if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
+        throw new Error('Koneksi ke Cloudinary gagal. Periksa koneksi internet atau AdBlocker Anda.');
+      }
+      throw new Error(err.message || 'Terjadi kesalahan jaringan saat mengunggah ke Cloudinary');
+    }
+  };
+
+  const handleGenerateAICaption = async () => {
+    if (!newsFile || !newsFile.type.startsWith('image/')) {
+      alert('Pilih foto terlebih dahulu untuk membuat caption AI.');
+      return;
+    }
+
+    setIsGeneratingCaption(true);
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(newsFile);
+      });
+      const base64Data = await base64Promise;
+
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          {
+            parts: [
+              { text: "Berikan caption singkat, menarik, dan positif untuk foto kegiatan pramuka ini (maksimal 15 kata):" },
+              { inlineData: { mimeType: newsFile.type, data: base64Data } }
+            ]
+          }
+        ]
+      });
+      
+      if (response.text) {
+        setNewsContent(prev => prev ? `${prev}\n\n${response.text}` : response.text);
+      }
+    } catch (err) {
+      console.error('Gemini error:', err);
+      alert('Gagal membuat caption AI.');
+    } finally {
+      setIsGeneratingCaption(false);
+    }
+  };
+
   const handleAddNews = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth.currentUser || isSubmittingNews) return;
     
     setIsSubmittingNews(true);
+    setNewsUploadProgress(0);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Waktu pengunggahan habis. Koneksi internet mungkin sangat lambat atau file terlalu besar. Silakan coba lagi dengan file yang lebih kecil.')), 300000)
+    );
+
     try {
       let mediaUrl = newsMediaUrl;
       
       if (newsFile) {
-        const fileExtension = newsFile.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExtension}`;
-        const storageRef = ref(storage, `berita/admin/${fileName}`);
+        let fileToUpload: Blob | File = newsFile;
         
-        const uploadResult = await uploadBytes(storageRef, newsFile);
-        mediaUrl = await getDownloadURL(uploadResult.ref);
+        // Compress image if it's an image and larger than 1MB
+        if (newsFile.type.startsWith('image/') && newsFile.size > 1024 * 1024) {
+          try {
+            console.log('Compressing news image before upload...');
+            fileToUpload = await compressImage(newsFile);
+            console.log('News image compressed. Original size:', newsFile.size, 'New size:', fileToUpload.size);
+          } catch (compressErr) {
+            console.error('Compression failed, using original file:', compressErr);
+          }
+        }
+
+        console.log('Uploading news file to Cloudinary:', newsFile.name, 'Final Size:', fileToUpload.size);
+        
+        try {
+          // Use Cloudinary for upload to avoid Firebase Storage costs/issues
+          const uploadPromise = uploadToCloudinary(fileToUpload);
+          
+          // Simulate progress for Cloudinary upload
+          const progressInterval = setInterval(() => {
+            setNewsUploadProgress(prev => {
+              if (prev >= 95) {
+                clearInterval(progressInterval);
+                return 95;
+              }
+              return prev + 5;
+            });
+          }, 500);
+
+          mediaUrl = await Promise.race([
+            uploadPromise,
+            timeoutPromise
+          ]) as string;
+          
+          clearInterval(progressInterval);
+          setNewsUploadProgress(100);
+          console.log('File uploaded to Cloudinary successfully:', mediaUrl);
+        } catch (error: any) {
+          console.error('Cloudinary upload error:', error);
+          alert(`Gagal mengunggah ke Cloudinary: ${error.message}. Pastikan VITE_CLOUDINARY_CLOUD_NAME dan VITE_CLOUDINARY_UPLOAD_PRESET sudah benar.`);
+          throw error;
+        }
       }
 
-      await addDoc(collection(db, 'berita'), {
-        title: newsTitle,
-        content: newsContent,
-        mediaUrl: mediaUrl,
-        mediaType: newsMediaType,
-        timestamp: serverTimestamp(),
-        authorId: auth.currentUser.uid,
-        authorName: auth.currentUser.displayName || 'Admin',
-        authorEmail: auth.currentUser.email || '',
-        authorPhoto: auth.currentUser.photoURL || '',
-        likes: []
-      });
+      await Promise.race([
+        addDoc(collection(db, 'berita'), {
+          title: newsTitle,
+          content: newsContent,
+          mediaUrl: mediaUrl,
+          mediaType: newsMediaType,
+          timestamp: serverTimestamp(),
+          authorId: auth.currentUser.uid,
+          authorName: auth.currentUser.displayName || 'Admin',
+          authorEmail: auth.currentUser.email || '',
+          authorPhoto: auth.currentUser.photoURL || '',
+          likes: []
+        }),
+        timeoutPromise
+      ]);
       setNewsTitle('');
       setNewsContent('');
       setNewsMediaUrl('');
@@ -545,6 +677,7 @@ Ketua Kwarran Jatinagara`
       alert('Gagal memposting berita.');
     } finally {
       setIsSubmittingNews(false);
+      setNewsUploadProgress(0);
     }
   };
 
@@ -781,16 +914,32 @@ Ketua Kwarran Jatinagara`
 
                       {newsFilePreview && (
                         <div className="relative rounded-2xl overflow-hidden border border-gray-100 bg-gray-50">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setNewsFile(null);
-                              setNewsFilePreview(null);
-                            }}
-                            className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full hover:bg-black transition-all z-10"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="absolute top-2 right-2 flex gap-2 z-10">
+                            {newsFile?.type.startsWith('image/') && (
+                              <button 
+                                type="button"
+                                onClick={handleGenerateAICaption}
+                                disabled={isGeneratingCaption}
+                                className={cn(
+                                  "p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-lg transition-all flex items-center gap-1 px-3",
+                                  isGeneratingCaption && "opacity-50 cursor-not-allowed"
+                                )}
+                              >
+                                <Sparkles className={cn("h-4 w-4", isGeneratingCaption && "animate-pulse")} />
+                                <span className="text-[10px] font-black uppercase tracking-widest">AI Caption</span>
+                              </button>
+                            )}
+                            <button 
+                              type="button"
+                              onClick={() => {
+                                setNewsFile(null);
+                                setNewsFilePreview(null);
+                              }}
+                              className="p-1.5 bg-black/50 text-white rounded-full hover:bg-black transition-all"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                           {newsMediaType === 'video' ? (
                             <video src={newsFilePreview} className="w-full max-h-48 object-contain" controls />
                           ) : (
@@ -817,12 +966,27 @@ Ketua Kwarran Jatinagara`
                     ))}
                   </div>
 
+                  {isSubmittingNews && (
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-500">
+                        <span>{newsUploadProgress < 100 ? 'Mengunggah...' : 'Menyimpan...'}</span>
+                        <span>{newsUploadProgress}%</span>
+                      </div>
+                      <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                        <div 
+                          style={{ width: `${newsUploadProgress}%` }}
+                          className="h-full bg-emerald-500 transition-all duration-300"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <button 
                     type="submit"
                     disabled={isSubmittingNews}
                     className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-900 transition-all disabled:opacity-50"
                   >
-                    {isSubmittingNews ? 'Publishing...' : 'Publish Berita'}
+                    {isSubmittingNews ? (newsUploadProgress < 100 ? 'MENGUNGGAH...' : 'PUBLISHING...') : 'Publish Berita'}
                   </button>
                 </div>
               </form>

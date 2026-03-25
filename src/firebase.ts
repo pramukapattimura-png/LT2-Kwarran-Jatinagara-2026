@@ -1,13 +1,14 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, orderBy, getDocFromServer, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId || '(default)');
 export const auth = getAuth(app);
 export const storage = getStorage(app);
+console.log('Firebase Storage initialized with bucket:', storage.app.options.storageBucket);
 export const googleProvider = new GoogleAuthProvider();
 
 // Connection test
@@ -104,5 +105,6 @@ export {
   GoogleAuthProvider,
   ref,
   uploadBytes,
-  getDownloadURL
+  getDownloadURL,
+  uploadBytesResumable
 };

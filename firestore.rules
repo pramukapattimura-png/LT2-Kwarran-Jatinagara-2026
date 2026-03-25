@@ -1,125 +1,126 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: regu
+    // Fields: nama, pangkalan, kategori, nomorTenda, pinru, wapinru, anggota
+    //
+    // Collection: lomba
+    // Fields: nama, bidangLomba, hari, bobot, kategori
+    //
+    // Collection: nilai
+    // Fields: reguId, lombaId, p1, p2, p3, p4, score
+    //
+    // Collection: berita
+    // Fields: title, content, mediaUrl, mediaType, authorId, authorName, authorEmail, authorPhoto, likes, timestamp
+    //
+    // Collection: komentar
+    // Fields: postId, author, authorId, authorEmail, authorPhoto, content, timestamp
+    //
+    // Collection: dokumen
+    // Fields: name, url, timestamp
+    //
+    // Collection: settings
+    // Fields: isLocked, lockedCategories, marqueeText, adminEmails, aboutContent, aboutImage
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
     function isAdmin() {
-      return isAuthenticated();
+      let isHardcodedAdmin = request.auth.token.email == "pramukapattimura@gmail.com";
+      let hasGlobalSettings = exists(/databases/$(database)/documents/settings/global);
+      let isConfigAdmin = hasGlobalSettings && 
+        get(/databases/$(database)/documents/settings/global).data.adminEmails != null && 
+        request.auth.token.email in get(/databases/$(database)/documents/settings/global).data.adminEmails;
+      
+      return isAuthenticated() && (isHardcodedAdmin || isConfigAdmin);
     }
 
-    function isValidRegu(data) {
-      return data.nama is string && data.nama.size() > 0 && data.nama.size() < 100 &&
-             data.pangkalan is string && data.pangkalan.size() > 0 &&
-             data.kategori in ["SD Putra", "SD Putri", "SMP Putra", "SMP Putri"] &&
-             (!('nomorTenda' in data) || data.nomorTenda is string) &&
-             (!('pinru' in data) || data.pinru is string) &&
-             (!('wapinru' in data) || data.wapinru is string) &&
-             (!('anggota' in data) || data.anggota is list);
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function isValidLomba(data) {
-      return data.nama is string && data.nama.size() > 0 &&
-             data.hari is number && data.hari >= 1 && data.hari <= 3 &&
-             data.kategori in ["SD Putra", "SD Putri", "SMP Putra", "SMP Putri"] &&
-             (!('bidangLomba' in data) || data.bidangLomba is string);
+    function isValidString(val, min, max) {
+      return val is string && val.size() >= min && val.size() <= max;
     }
 
-    function isValidNilai(data) {
-      return data.reguId is string && data.lombaId is string &&
-             data.score is number && data.score >= 0 &&
-             (!('p1' in data) || data.p1 is number) &&
-             (!('p2' in data) || data.p2 is number) &&
-             (!('p3' in data) || data.p3 is number) &&
-             (!('p4' in data) || data.p4 is number);
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*") || url == "");
     }
 
-    function isValidKomentar(data) {
-      return data.author is string && data.author.size() > 0 && data.author.size() < 100 &&
-             data.authorId is string && data.authorId == request.auth.uid &&
-             data.content is string && data.content.size() > 0 && data.content.size() < 1000 &&
-             data.timestamp is timestamp &&
-             (!('postId' in data) || data.postId is string) &&
-             (!('authorPhoto' in data) || data.authorPhoto is string);
-    }
+    // ===============================================================
+    // Rules
+    // ===============================================================
 
-    function isValidRekapNilai(data) {
-      return (data.grid is list || data.grid is string) &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp || data.updatedAt == request.time);
-    }
-
-    function isValidDokumen(data) {
-      return data.nama is string && data.nama.size() > 0 &&
-             (!('kategori' in data) || data.kategori is string) &&
-             data.url is string && data.url.size() > 0 &&
-             (data.timestamp is timestamp || data.timestamp == request.time);
-    }
-
-    function hasOnlyAllowedFields(data, allowedFields) {
-      return data.keys().hasOnly(allowedFields);
-    }
-
-    function isValidBerita(data) {
-      let allowedFields = ['title', 'content', 'mediaUrl', 'mediaType', 'timestamp', 'authorId', 'authorName', 'authorEmail', 'authorPhoto', 'likes'];
-      return hasOnlyAllowedFields(data, allowedFields) &&
-             data.content is string && data.content.size() > 0 && data.content.size() <= 5000 &&
-             data.authorId is string &&
-             (!('title' in data) || (data.title is string && data.title.size() <= 200)) &&
-             (!('mediaUrl' in data) || data.mediaUrl is string) &&
-             (!('mediaType' in data) || data.mediaType in ["image", "video"]) &&
-             (!('authorName' in data) || data.authorName is string) &&
-             (!('authorEmail' in data) || data.authorEmail is string) &&
-             (!('authorPhoto' in data) || data.authorPhoto is string) &&
-             (!('likes' in data) || data.likes is list) &&
-             (data.timestamp is timestamp || data.timestamp == request.time);
-    }
-
+    // Regu
     match /regu/{reguId} {
       allow read: if true;
-      allow write: if isAdmin() && isValidRegu(request.resource.data);
+      allow write: if isAdmin();
     }
 
+    // Lomba
     match /lomba/{lombaId} {
       allow read: if true;
-      allow write: if isAdmin() && isValidLomba(request.resource.data);
+      allow write: if isAdmin();
     }
 
+    // Nilai
     match /nilai/{nilaiId} {
       allow read: if true;
-      allow write: if isAdmin() && isValidNilai(request.resource.data);
+      allow write: if isAdmin();
     }
 
-    match /komentar/{komId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && isValidKomentar(request.resource.data);
-      allow delete: if isAdmin();
-    }
-
+    // Berita (Posts)
     match /berita/{beritaId} {
       allow read: if true;
-      allow create: if isAuthenticated() && isValidBerita(request.resource.data) && (request.resource.data.authorId == request.auth.uid || isAdmin());
-      allow update: if (isAdmin() && isValidBerita(request.resource.data)) || 
-                     (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']));
-      allow delete: if isAdmin() || 
-                     (isAuthenticated() && (
-                       (resource.data.keys().contains('authorId') && resource.data.authorId == request.auth.uid) ||
-                       (resource.data.keys().contains('authorEmail') && resource.data.authorEmail == request.auth.token.email)
-                     ));
+      allow create: if isAuthenticated() && 
+        request.resource.data.authorId == request.auth.uid &&
+        isValidString(request.resource.data.content, 1, 5000);
+      allow update: if isAuthenticated() && (
+        // Allow owner to update content/media
+        (request.resource.data.authorId == resource.data.authorId && request.auth.uid == resource.data.authorId) ||
+        // Allow anyone to update likes
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']))
+      );
+      allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.authorId);
     }
 
+    // Komentar
+    match /komentar/{komentarId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && 
+        request.resource.data.authorId == request.auth.uid &&
+        isValidString(request.resource.data.content, 1, 1000);
+      allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.authorId);
+    }
+
+    // Settings
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Dokumen
     match /dokumen/{docId} {
       allow read: if true;
-      allow write: if isAdmin() && isValidDokumen(request.resource.data);
-    }
-    
-    match /settings/{docId} {
-      allow read: if true;
-      allow write: if isAdmin() && 
-                    (docId == 'global' || docId == 'laporan' || docId.matches('rekap_.*')) &&
-                    (docId.matches('rekap_.*') || docId == 'laporan' ? isValidRekapNilai(request.resource.data) : true);
+      allow write: if isAdmin();
     }
 
+    // Test Connection
     match /test/connection {
       allow read: if true;
     }
