@@ -19,8 +19,29 @@ export default function App() {
               <Route path="/admin" element={<AdminDashboard />} />
             </Routes>
           </main>
-          <footer className="bg-black text-white py-4 sm:py-6 mt-auto border-t border-gray-800">
-            <div className="max-w-7xl mx-auto px-4 space-y-4 sm:space-y-6">
+          <footer className="bg-black text-white py-8 sm:py-12 mt-auto border-t border-gray-800">
+            <div className="max-w-7xl mx-auto px-4 space-y-8 sm:space-y-12">
+              {/* Maps Section */}
+              <div className="w-full space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-1 w-8 bg-emerald-500 rounded-full"></div>
+                  <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Lokasi Kegiatan</h4>
+                </div>
+                <div className="w-full h-64 sm:h-80 rounded-3xl overflow-hidden border border-gray-800 bg-gray-900 shadow-2xl relative group">
+                  <iframe
+                    src="https://maps.google.com/maps?q=-7.1754470,108.3879570&t=k&z=17&ie=UTF8&iwloc=&output=embed"
+                    width="100%"
+                    height="100%"
+                    style={{ border: 0 }}
+                    allowFullScreen
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    title="Lokasi Kwarran Jatinagara"
+                    className="contrast-125 opacity-90 group-hover:opacity-100 transition-all duration-700"
+                  ></iframe>
+                </div>
+              </div>
+
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-8">
                 {/* Logo & Title */}
                 <div className="flex flex-row items-center gap-3 sm:gap-4 flex-1">
