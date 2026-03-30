@@ -56,6 +56,8 @@ export interface AppConfig {
   adminEmails?: string[];
   aboutContent?: string;
   aboutImage?: string;
+  aboutContent2?: string;
+  aboutImage2?: string;
 }
 
 export interface Berita {

@@ -1025,33 +1025,27 @@ export default function Home() {
           <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
             <div className="space-y-1">
               <h2 className="text-[clamp(8px,3.5vw,24px)] sm:text-xl md:text-2xl font-black text-black tracking-tighter uppercase whitespace-nowrap">
-                Tentang <span className="text-gray-500">LT2 Kwarran Jatinagara</span>
+                Info <span className="text-gray-500">LT2 Kwarran Jatinagara</span>
               </h2>
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-[0.2em]">Informasi seputar kegiatan</p>
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-[0.2em]">Sambutan & Informasi Kegiatan</p>
             </div>
 
-            <div className="bg-white rounded-[3rem] border border-gray-200 overflow-hidden shadow-xl">
-              <div className="p-8 sm:p-12">
-                <div className="block">
-                  {(config?.aboutImage || 'https://i.imgur.com/bOD7Igj.png') && (
-                    <div className="w-full md:w-1/2 lg:w-2/5 md:float-right md:ml-8 mb-6 md:mb-4">
-                      <img 
-                        src={config?.aboutImage || 'https://i.imgur.com/bOD7Igj.png'} 
-                        alt="LT2 Kwarran Jatinagara" 
-                        className="w-full h-auto object-cover rounded-2xl shadow-lg border border-gray-100"
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-                  )}
-                  <div className="prose max-w-none">
-                    {(config?.aboutContent || `Assalamu'alaiakum Wr Wb
-Salam Pramuka
-Kakak - Kakak pembina pramuka semua dan seluruh pramuka di kwarran jatinagara dan yang berada diseluruh indonesia, kwarran Jatinagara Kwarcab Ciamis pada tahun 2026 ini akan menyelenggarakan LT2 lomba tingkat 2 pramuka penggalang. platform ini kami sediakan untuk memberikan akses informasi secara transparan mulai dari persiapan sampai pasca kegiatan. untuk itu silahkan kakak kakak update untuk mendapatkan informasi dan bersilaturahmi dengan sesama pramuka yang berada di kwarcab ciamis.
-
-kami menyadari pasti ada kekurangan yang perlu dibenahi agar kegiatan LT2 ini dapat mendekati sempurna, kritik dan saran kami harapkan agar menjadi bahan berbenah bagi kami dari pramuka kwarran jatinagara, pramuka ciamis atau pramuka diseluruh indonesia.
-
-H. dadi Supriadi, S.Pd, SD
-Ketua Kwarran Jatinagara`) ? (
+            <div className="grid grid-cols-1 gap-12">
+              {/* Sambutan 1 */}
+              <div className="bg-white rounded-[3rem] border border-gray-200 overflow-hidden shadow-xl">
+                <div className="p-8 sm:p-12">
+                  <div className="block">
+                    {(config?.aboutImage || 'https://picsum.photos/seed/pramuka/800/1000') && (
+                      <div className="w-full md:w-1/2 lg:w-2/5 md:float-right md:ml-8 mb-6 md:mb-4">
+                        <img 
+                          src={config?.aboutImage || 'https://picsum.photos/seed/pramuka/800/1000'} 
+                          alt="Sambutan 1" 
+                          className="w-full h-auto object-cover rounded-2xl shadow-lg border border-gray-100"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                    )}
+                    <div className="prose max-w-none">
                       <div className="text-black font-medium leading-relaxed whitespace-pre-wrap text-lg">
                         {config?.aboutContent || `Assalamu'alaiakum Wr Wb
 Salam Pramuka
@@ -1062,14 +1056,35 @@ kami menyadari pasti ada kekurangan yang perlu dibenahi agar kegiatan LT2 ini da
 H. dadi Supriadi, S.Pd, SD
 Ketua Kwarran Jatinagara`}
                       </div>
-                    ) : (
-                      <div className="py-20 text-center bg-gray-50 rounded-3xl border border-gray-200 border-dashed">
-                        <p className="text-gray-400 font-black uppercase tracking-widest text-xs">Belum ada informasi yang ditambahkan</p>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
+
+              {/* Sambutan 2 */}
+              {(config?.aboutContent2 || config?.aboutImage2) && (
+                <div className="bg-white rounded-[3rem] border border-gray-200 overflow-hidden shadow-xl">
+                  <div className="p-8 sm:p-12">
+                    <div className="block">
+                      {config?.aboutImage2 && (
+                        <div className="w-full md:w-1/2 lg:w-2/5 md:float-left md:mr-8 mb-6 md:mb-4">
+                          <img 
+                            src={config.aboutImage2} 
+                            alt="Sambutan 2" 
+                            className="w-full h-auto object-cover rounded-2xl shadow-lg border border-gray-100"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      )}
+                      <div className="prose max-w-none">
+                        <div className="text-black font-medium leading-relaxed whitespace-pre-wrap text-lg">
+                          {config?.aboutContent2}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         }

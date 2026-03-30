@@ -51,6 +51,8 @@ export default function AdminDashboard() {
   const [marqueeText, setMarqueeText] = useState('');
   const [aboutContent, setAboutContent] = useState('');
   const [aboutImage, setAboutImage] = useState('');
+  const [aboutContent2, setAboutContent2] = useState('');
+  const [aboutImage2, setAboutImage2] = useState('');
   const [adminEmails, setAdminEmails] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -132,6 +134,8 @@ export default function AdminDashboard() {
         setMarqueeText(data.marqueeText || '');
         setAboutContent(data.aboutContent || '');
         setAboutImage(data.aboutImage || '');
+        setAboutContent2(data.aboutContent2 || '');
+        setAboutImage2(data.aboutImage2 || '');
         setAdminEmails(data.adminEmails?.join(', ') || '');
 
         // User check is handled by onAuthStateChanged effect
@@ -502,6 +506,8 @@ Ketua Kwarran Jatinagara`
       marqueeText,
       aboutContent,
       aboutImage,
+      aboutContent2,
+      aboutImage2,
       adminEmails: emailList
     }, { merge: true });
     alert('Settings updated!');
@@ -825,24 +831,52 @@ Ketua Kwarran Jatinagara`
                 </button>
 
                 <div className="space-y-4 pt-4 border-t border-gray-100">
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Tentang LT2 (Gambar URL)</label>
+                  <div className="flex items-center gap-2">
+                    <div className="h-1 w-4 bg-black rounded-full"></div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Sambutan 1 (Gambar URL)</label>
+                  </div>
                   <input 
                     type="text"
                     value={aboutImage}
                     onChange={(e) => setAboutImage(e.target.value)}
                     className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
-                    placeholder="https://..."
+                    placeholder="Contoh: https://i.ibb.co/image.jpg (Gunakan Direct Link)"
                   />
                 </div>
 
                 <div className="space-y-4">
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Tentang LT2 (Artikel)</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Sambutan 1 (Artikel)</label>
                   <textarea 
                     value={aboutContent}
                     onChange={(e) => setAboutContent(e.target.value)}
                     className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
-                    rows={8}
-                    placeholder="Tulis artikel tentang LT2..."
+                    rows={6}
+                    placeholder="Tulis artikel sambutan 1..."
+                  />
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <div className="h-1 w-4 bg-gray-600 rounded-full"></div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Sambutan 2 (Gambar URL)</label>
+                  </div>
+                  <input 
+                    type="text"
+                    value={aboutImage2}
+                    onChange={(e) => setAboutImage2(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
+                    placeholder="Contoh: https://i.ibb.co/image.jpg (Gunakan Direct Link)"
+                  />
+                </div>
+
+                <div className="space-y-4">
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Sambutan 2 (Artikel)</label>
+                  <textarea 
+                    value={aboutContent2}
+                    onChange={(e) => setAboutContent2(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-black text-sm outline-none focus:border-black transition-all"
+                    rows={6}
+                    placeholder="Tulis artikel sambutan 2..."
                   />
                 </div>
               </div>
